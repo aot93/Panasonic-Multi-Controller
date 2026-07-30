@@ -22,6 +22,9 @@ release/
 .DS_Store
 Thumbs.db
 
+# Vite build-time temp file (ESM config interop), not meant to persist
+vite.config.ts.timestamp-*.mjs
+
 # Claude Code — personal/machine-specific tool permissions, not shared
 .claude/settings.local.json
 

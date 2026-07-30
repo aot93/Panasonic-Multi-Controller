@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ASPECT_OPTIONS, INPUT_OPTIONS, SCREEN_SETTING_OPTIONS } from '@ppc/shared';
 import type { DeviceWithState } from '@ppc/shared';
 import { useDeleteDevice, useUpdateDevice } from '../hooks/useDevices';
@@ -34,7 +34,8 @@ const screenLabel = (value: string) => SCREEN_SETTING_OPTIONS.find((o) => o.valu
 interface DeviceCardProps {
   device: DeviceWithState;
   selected: boolean;
-  onToggleSelected: (deviceId: number) => void;
+  /** `shiftKey` lets the caller (DeviceGrid) select the whole range between this card and the last one clicked, instead of just toggling this one. */
+  onToggleSelected: (deviceId: number, shiftKey: boolean) => void;
   onOpenAnalytics: (deviceId: number) => void;
   onOpenCredentials: (deviceId: number) => void;
 }
@@ -47,6 +48,13 @@ export function DeviceCard({ device, selected, onToggleSelected, onOpenAnalytics
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(device.name);
+
+  // Shift-click range select (DeviceGrid.tsx) needs to know whether shift
+  // was held for this click, but reading it here — rather than intercepting
+  // onClick with preventDefault — lets the checkbox keep its native,
+  // instantly-painted toggle for the common case. mousedown fires before
+  // click/change and doesn't touch the checkbox's default behaviour at all.
+  const shiftHeldRef = useRef(false);
 
   function handleDelete() {
     if (!window.confirm(`Remove "${device.name}" from the application? This cannot be undone.`)) return;
@@ -87,7 +95,10 @@ export function DeviceCard({ device, selected, onToggleSelected, onOpenAnalytics
         <input
           type="checkbox"
           checked={selected}
-          onChange={() => onToggleSelected(device.id)}
+          onMouseDown={(e) => {
+            shiftHeldRef.current = e.shiftKey;
+          }}
+          onChange={() => onToggleSelected(device.id, shiftHeldRef.current)}
           className="h-4 w-4 rounded border-slate-600 bg-slate-800 accent-sky-500"
           aria-label={`Select ${device.name}`}
         />

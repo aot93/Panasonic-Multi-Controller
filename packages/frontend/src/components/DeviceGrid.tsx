@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { DeviceWithState, GroupWithCount } from '@ppc/shared';
 import { AddDeviceForm } from './AddDeviceForm';
 import { BulkAddDevicesForm } from './BulkAddDevicesForm';
@@ -33,6 +34,30 @@ export function DeviceGrid({
   // to select its members" behaviour rather than replacing it.
   const visibleDevices = activeGroupId === null ? devices : devices.filter((d) => d.groupIds.includes(activeGroupId));
   const allSelected = visibleDevices.length > 0 && selectedIds.size === visibleDevices.length;
+
+  // Shift-click range select: the anchor is whichever card was last clicked
+  // WITHOUT shift, and stays put across repeated shift-clicks (so
+  // shift-clicking a second, then a third card re-measures the range from
+  // the same anchor each time, standard file-manager behaviour) — reset by
+  // any plain click, and otherwise left alone by every other selection path
+  // (group chips, Select/Deselect all) since those don't go through this.
+  const lastClickedIdRef = useRef<number | null>(null);
+
+  function handleCardToggle(deviceId: number, shiftKey: boolean) {
+    const anchorId = lastClickedIdRef.current;
+    if (shiftKey && anchorId !== null) {
+      const ids = visibleDevices.map((d) => d.id);
+      const anchorIndex = ids.indexOf(anchorId);
+      const targetIndex = ids.indexOf(deviceId);
+      if (anchorIndex !== -1 && targetIndex !== -1) {
+        const [start, end] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+        onSelectIds(ids.slice(start, end + 1));
+        return;
+      }
+    }
+    lastClickedIdRef.current = deviceId;
+    onToggleSelected(deviceId);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -98,7 +123,7 @@ export function DeviceGrid({
               key={device.id}
               device={device}
               selected={selectedIds.has(device.id)}
-              onToggleSelected={onToggleSelected}
+              onToggleSelected={handleCardToggle}
               onOpenAnalytics={onOpenAnalytics}
               onOpenCredentials={onOpenCredentials}
             />
