@@ -4,6 +4,18 @@ Web app for monitoring and controlling a fleet of Panasonic projectors over
 the network — see `Claude/Panasonic_Projector_App_Spec_v2.md` for the full
 spec and `docs/protocol-notes.md` for protocol implementation notes.
 
+## Download (Windows)
+
+**[⬇ Download ProjectorControl-win.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-win.zip)**
+— extract anywhere and run `ProjectorControl.exe`. No install, no Node.js
+required. See `docs/UserGuide.md` (also rendered in-app, About tab) for
+setup and usage.
+
+This repo is currently **private** during an invite-only beta — the link
+above only works if you're logged into GitHub as a collaborator with
+access. It'll become a public, no-login download once the beta period
+ends.
+
 **Status: Phase 7 packaging done (Windows only), real-hardware testing
 succeeded against 192.168.0.101–122, `docs/NextSteps.md` Phases 1 and 2 are
 complete (10 feature items + live preview, confirmed working against the
