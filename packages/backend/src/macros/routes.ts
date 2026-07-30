@@ -1,0 +1,251 @@
+import type { DatabaseSync } from 'node:sqlite';
+import { Router } from 'express';
+import { z } from 'zod';
+import type { Macro, MacroStep } from '@ppc/shared';
+import type { Dispatch } from '../dispatch/dispatch.js';
+import { asyncHandler } from '../http/async-handler.js';
+import {
+  BadRequestError,
+  NotFoundError,
+  isForeignKeyConstraintError,
+  isUniqueConstraintError,
+} from '../http/errors.js';
+import { runMacro } from './run-macro.js';
+
+const targetKindSchema = z.enum(['device', 'group', 'all']);
+
+const macroStepSchema = z
+  .object({
+    commandId: z.number().int(),
+    param: z.string().nullable().optional(),
+    delayMsAfter: z.number().int().min(0).default(200),
+    targetKind: targetKindSchema.nullable().optional(),
+    targetId: z.number().int().nullable().optional(),
+  })
+  .refine((v) => !v.targetKind || (v.targetKind === 'all' ? v.targetId == null : v.targetId != null), {
+    message: 'a step target override must satisfy: "all" omits targetId, "device"/"group" requires it',
+    path: ['targetId'],
+  });
+
+const createMacroSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  colour: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  sortOrder: z.number().int().default(0),
+  steps: z.array(macroStepSchema).min(1, 'a macro needs at least one step'),
+});
+
+const updateMacroSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  colour: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+  /** If provided, replaces the entire step sequence — a macro builder saves the whole thing at once. */
+  steps: z.array(macroStepSchema).min(1).optional(),
+});
+
+const runMacroSchema = z.object({
+  target: z.object({ kind: targetKindSchema, ids: z.array(z.number().int()).optional() }).optional(),
+});
+
+interface MacroRow {
+  id: number;
+  name: string;
+  description: string | null;
+  colour: string | null;
+  icon: string | null;
+  sort_order: number;
+}
+
+interface MacroStepRow {
+  id: number;
+  macro_id: number;
+  seq: number;
+  command_id: number;
+  param: string | null;
+  delay_ms_after: number;
+  target_kind: MacroStep['targetKind'];
+  target_id: number | null;
+}
+
+function toStep(row: MacroStepRow): MacroStep {
+  return {
+    id: row.id,
+    macroId: row.macro_id,
+    seq: row.seq,
+    commandId: row.command_id,
+    param: row.param,
+    delayMsAfter: row.delay_ms_after,
+    targetKind: row.target_kind,
+    targetId: row.target_id,
+  };
+}
+
+function toMacro(row: MacroRow, steps: MacroStepRow[]): Macro {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    colour: row.colour,
+    icon: row.icon,
+    sortOrder: row.sort_order,
+    steps: steps.map(toStep),
+  };
+}
+
+function loadMacro(db: DatabaseSync, id: number): Macro | null {
+  const row = db.prepare('SELECT * FROM macros WHERE id = ?').get(id) as MacroRow | undefined;
+  if (!row) return null;
+  const steps = db
+    .prepare('SELECT * FROM macro_steps WHERE macro_id = ? ORDER BY seq')
+    .all(id) as unknown as MacroStepRow[];
+  return toMacro(row, steps);
+}
+
+function requireMacro(db: DatabaseSync, id: number): Macro {
+  const macro = loadMacro(db, id);
+  if (!macro) throw new NotFoundError(`No macro with id ${id}`);
+  return macro;
+}
+
+function insertSteps(db: DatabaseSync, macroId: number, steps: z.infer<typeof macroStepSchema>[]): void {
+  const insert = db.prepare(
+    `INSERT INTO macro_steps (macro_id, seq, command_id, param, delay_ms_after, target_kind, target_id)
+     VALUES (@macroId, @seq, @commandId, @param, @delayMsAfter, @targetKind, @targetId)`,
+  );
+  steps.forEach((step, seq) => {
+    insert.run({
+      macroId,
+      seq,
+      commandId: step.commandId,
+      param: step.param ?? null,
+      delayMsAfter: step.delayMsAfter,
+      targetKind: step.targetKind ?? null,
+      targetId: step.targetId ?? null,
+    });
+  });
+}
+
+/**
+ * CRUD for macros (spec §5: "custom button" / "program a sequence of
+ * actions"), plus POST /:id/run to execute one — the minimal execution
+ * engine (run-macro.ts) built alongside this router so triggers/schedules
+ * referencing a macro actually do something instead of returning
+ * "not supported yet".
+ */
+export function macrosRouter(db: DatabaseSync, dispatch: Dispatch): Router {
+  const router = Router();
+
+  router.get('/', (_req, res) => {
+    const rows = db.prepare('SELECT * FROM macros ORDER BY sort_order, name').all() as unknown as MacroRow[];
+    res.json(rows.map((row) => loadMacro(db, row.id)));
+  });
+
+  router.get(
+    '/:id',
+    asyncHandler(async (req, res) => {
+      res.json(requireMacro(db, Number(req.params.id)));
+    }),
+  );
+
+  router.post(
+    '/',
+    asyncHandler(async (req, res) => {
+      const body = createMacroSchema.parse(req.body);
+      let macroId: number;
+      try {
+        const info = db
+          .prepare(
+            'INSERT INTO macros (name, description, colour, icon, sort_order) VALUES (@name, @description, @colour, @icon, @sortOrder)',
+          )
+          .run({
+            name: body.name,
+            description: body.description ?? null,
+            colour: body.colour ?? null,
+            icon: body.icon ?? null,
+            sortOrder: body.sortOrder,
+          });
+        macroId = Number(info.lastInsertRowid);
+        insertSteps(db, macroId, body.steps);
+      } catch (err) {
+        if (isUniqueConstraintError(err)) throw new BadRequestError(`A macro named "${body.name}" already exists`);
+        if (isForeignKeyConstraintError(err)) throw new BadRequestError('A step references a commandId that does not exist');
+        throw err;
+      }
+      res.status(201).json(requireMacro(db, macroId));
+    }),
+  );
+
+  router.patch(
+    '/:id',
+    asyncHandler(async (req, res) => {
+      const macroId = Number(req.params.id);
+      requireMacro(db, macroId);
+      const body = updateMacroSchema.parse(req.body);
+
+      const sets: string[] = [];
+      const params: Record<string, string | number | null> = { id: macroId };
+      if ('name' in body) {
+        sets.push('name = @name');
+        params.name = body.name!;
+      }
+      if ('description' in body) {
+        sets.push('description = @description');
+        params.description = body.description ?? null;
+      }
+      if ('colour' in body) {
+        sets.push('colour = @colour');
+        params.colour = body.colour ?? null;
+      }
+      if ('icon' in body) {
+        sets.push('icon = @icon');
+        params.icon = body.icon ?? null;
+      }
+      if ('sortOrder' in body) {
+        sets.push('sort_order = @sortOrder');
+        params.sortOrder = body.sortOrder!;
+      }
+
+      try {
+        if (sets.length > 0) {
+          db.prepare(`UPDATE macros SET ${sets.join(', ')} WHERE id = @id`).run(params);
+        }
+        if (body.steps) {
+          db.prepare('DELETE FROM macro_steps WHERE macro_id = ?').run(macroId);
+          insertSteps(db, macroId, body.steps);
+        }
+      } catch (err) {
+        if (isUniqueConstraintError(err)) throw new BadRequestError(`A macro named "${body.name}" already exists`);
+        if (isForeignKeyConstraintError(err)) throw new BadRequestError('A step references a commandId that does not exist');
+        throw err;
+      }
+
+      res.json(requireMacro(db, macroId));
+    }),
+  );
+
+  router.delete(
+    '/:id',
+    asyncHandler(async (req, res) => {
+      const macroId = Number(req.params.id);
+      const info = db.prepare('DELETE FROM macros WHERE id = ?').run(macroId);
+      if (info.changes === 0) throw new NotFoundError(`No macro with id ${macroId}`);
+      res.status(204).end();
+    }),
+  );
+
+  router.post(
+    '/:id/run',
+    asyncHandler(async (req, res) => {
+      const macroId = Number(req.params.id);
+      requireMacro(db, macroId);
+      const body = runMacroSchema.parse(req.body ?? {});
+      const result = await runMacro(db, dispatch, macroId, body.target ?? null, 'ui');
+      res.json(result);
+    }),
+  );
+
+  return router;
+}

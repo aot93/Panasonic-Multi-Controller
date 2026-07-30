@@ -1,0 +1,26 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Runtime data — the SQLite database lives beside the executable at runtime
+data/
+.test-data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Local env / secrets (projector admin passwords)
+.env
+.env.local
+
+# Packaging output (phase 7)
+release/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Claude Code — personal/machine-specific tool permissions, not shared
+.claude/settings.local.json

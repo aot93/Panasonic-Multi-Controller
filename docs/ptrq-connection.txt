@@ -1,0 +1,234 @@
+
+===== PAGE 1 =====
+Chapter 7 Appendix — Technical information
+ENGLISH - 317
+ r LENS H SHIFT MSB, LENS V SHIFT MSB, LENS FOCUS MSB, LENS ZOOM MSB
+Operate LENS H SHIFT MSB together with LENS H SHIFT LSB.
+Operate LENS V SHIFT MSB together with LENS V SHIFT LSB.
+Operate LENS FOCUS MSB together with LENS FOCUS LSB.
+Operate LENS ZOOM MSB together with LENS ZOOM LSB.
+Performance Parameter Default value
+No operation 0-15 0Coarse adjustment 16-255
+ r LENS H SHIFT LSB, LENS V SHIFT LSB, LENS FOCUS LSB, LENS ZOOM LSB
+Operate LENS H SHIFT LSB together with LENS H SHIFT MSB.
+Operate LENS V SHIFT LSB together with LENS V SHIFT MSB.
+Operate LENS FOCUS LSB together with LENS FOCUS MSB.
+Operate LENS ZOOM LSB together with LENS ZOOM MSB.
+Performance Parameter Default value
+No operation 0-15 0Fine adjustment 16-255
+ r ENABLE/DISABLE
+Operation for all channels is not accepted when set to “Disable”.
+Performance Parameter Default value
+Disable 0-127 0Enable 128-255
+Note
+ f If the projector is operated using the remote control or the control panel, or by the control command while controlling the projector using the 
+Art-Net function, the setting of the DMX controller or computer application may be different from the projector status. To reflect the controls 
+of all channels to the projector, set “ENABLE/DISABLE” of channel 11 to “Disable” and then back to “Enable”.
+ f To create and register the USER LOGO image, use “Logo Transfer Software”. The software can be downloaded from the following website.
+ https://docs.connect.panasonic.com/projector
+Control commands via LAN
+The projector can be controlled via the <DIGITAL LINK> terminal or the <LAN> terminal by using the control 
+command format via the <SERIAL IN> terminal.
+For examples of the available commands, refer to “Control command” (x page 324).
+Note
+ f To send/receive the command via LAN, it is necessary to set the password of the administrator account. (x page 240)
+When connecting in protect mode
+Connecting
+Following is the connection method when the [NETWORK] menu → [NETWORK SECURITY] → [COMMAND 
+PROTECT] is set to [ENABLE(MD5)] or [ENABLE(SHA-256)].
+1) Obtain the IP address and port number (Initial set value = 1024) of the projector and request a 
+connection to the projector.
+ f You can obtain both the IP address and the port number from the menu screen of the projector.
+IP address Obtain from the [NETWORK] menu → [NETWORK STATUS].
+Port number Obtain from the [NETWORK] menu → [NETWORK CONTROL] → [COMMAND PORT].
+2) Check the response from the projector.
+===== PAGE 2 =====
+Chapter 7 Appendix — Technical information
+318 - ENGLISH
+Data section Blank Mode Blank Random number section Termination 
+symbol
+Command 
+example
+“NTCONTROL”
+(ASCII string)
+‘ ’
+0x20
+‘1’
+0x31
+‘ ’
+0x20
+“zzzzzzzz”
+(ASCII code hex number)
+(CR)
+0x0d
+Data length 9 bytes 1 byte 1 byte 1 byte 8 bytes 1 byte
+ f Mode: 1 = Protect mode when [COMMAND PROTECT] is set to [ENABLE(MD5)] 
+Mode: 2 = Protect mode when [COMMAND PROTECT] is set to [ENABLE(SHA-256)]
+ f Example: Response during protect mode (Mode: 1) (random number section is undefined value)
+“NTCONTROL 1 23181e1e” (CR)
+3) Generate a 32-byte (MD5) or 64-byte (SHA-256) hash value from the following data using MD5 or  
+SHA-256 algorithm.
+ f “xxxxxx:yyyyy:zzzzzzzz”
+xxxxxx The user name for the administrator account
+yyyyy The password for the administrator account
+zzzzzzzz 8-byte random number obtained in Step 2)
+Command transmission method
+Transmit using the following command formats.
+ r Transmitted data
+Header Data section Termination 
+symbol
+Command 
+example
+Hash value
+“Connecting” (x page 317)
+‘0’
+0x30
+‘0’
+0x30
+Control command
+(ASCII string)
+(CR)
+0x0d
+Data length 32 bytes or 64 bytes 1 byte 1 byte Undefined length 1 byte
+ f Example: Transmission of power supply status acquisition command (hash value is calculated from the user 
+name and password of the administrator account, and acquired random number)
+“dbdd2dabd3d4d68c5dd970ec0c29fa6400QPW” (CR)
+ r Received data
+Header Data section Termination 
+symbol
+Command 
+example
+‘0’
+0x30
+‘0’
+0x30
+Control command
+(ASCII string)
+(CR)
+0x0d
+Data length 1 byte 1 byte Undefined length 1 byte
+ f Example: The projector is powered on
+“00001” (CR)
+ r Error response
+String Details Termination 
+symbol
+Message
+“ERR1” Undefined control command
+(CR)
+0x0d
+“ERR2” Out of parameter range
+“ERR3” Busy state or no-acceptable period
+“ERR4” Timeout or no-acceptable period
+“ERR5” Wrong data length
+“ERRA” Password mismatch
+“ERRA ***” Access prohibition period due to consecutive password mismatch
+Data length 4 bytes ― 1 byte
+===== PAGE 3 =====
+Chapter 7 Appendix — Technical information
+ENGLISH - 319
+Note
+ f If you enter the password incorrectly three times  in a row, accessing the projector will be prohibited for a few minutes. The number at the 
+end of the error response “ERRA ***” indicates the prohibition period in seconds.
+ f The projector is initially set to disconnect the session right after the response to a command received from the client, until it receives 
+another connection request. This is the specification based on the security view point to prevent unauthorized operation of this product 
+by a malicious third party. To send / receive multiple commands continuously, set the [NETWORK] menu → [NETWORK CONTROL] → 
+[COMMAND SESSION PROLONG] to [30SEC.]. For details, refer to “Communication flow between server and client” (x page 320).
+When connecting in non-protect mode
+Connecting
+Following is the connection method when the [NETWORK] menu → [NETWORK SECURITY] → [COMMAND 
+PROTECT] is set to [DISABLE].
+1) Obtain the IP address and port number (Initial set value = 1024) of the projector and request a 
+connection to the projector.
+ f You can obtain both the IP address and the port number from the menu screen of the projector.
+IP address Obtain from the [NETWORK] menu → [NETWORK STATUS].
+Port number Obtain from the [NETWORK] menu → [NETWORK CONTROL] → [COMMAND PORT].
+2) Check the response from the projector.
+Data section Blank Mode Termination 
+symbol
+Command 
+example
+“NTCONTROL”
+(ASCII string)
+‘ ’
+0x20
+‘0’
+0x30
+(CR)
+0x0d
+Data length 9 bytes 1 byte 1 byte 1 byte
+ f Mode: 0 = Non-protect mode
+ f Example: Response during non-protect mode
+“NTCONTROL 0” (CR)
+Command transmission method
+Transmit using the following command formats.
+ r Transmitted data
+Header Data section Termination 
+symbol
+Command 
+example
+‘0’
+0x30
+‘0’
+0x30
+Control command
+(ASCII string)
+(CR)
+0x0d
+Data length 1 byte 1 byte Undefined length 1 byte
+ f Example: Transmission of power supply status acquisition command
+“00QPW” (CR)
+ r Received data
+Header Data section Termination 
+symbol
+Command 
+example
+‘0’
+0x30
+‘0’
+0x30
+Control command
+(ASCII string)
+(CR)
+0x0d
+Data length 1 byte 1 byte Undefined length 1 byte
+ f Example: The projector is in standby status
+“00000” (CR)
+===== PAGE 4 =====
+Chapter 7 Appendix — Technical information
+320 - ENGLISH
+ r Error response
+String Details Termination 
+symbol
+Message
+“ERR1” Undefined control command
+(CR)
+0x0d
+“ERR2” Out of parameter range
+“ERR3” Busy state or no-acceptable period
+“ERR4” Timeout or no-acceptable period
+“ERR5” Wrong data length
+Data length 4 bytes ― 1 byte
+Note
+ f The projector is initially set to disconnect the session right after the response to a command received from the client, until it receives 
+another connection request. This is the specification based on the security view point to prevent unauthorized operation of this product 
+by a malicious third party. To send / receive multiple commands continuously, set the [NETWORK] menu → [NETWORK CONTROL] → 
+[COMMAND SESSION PROLONG] to [30SEC.]. For details, refer to “Communication flow between server and client” (x page 320).
+Communication flow between server and client
+To send/receive a command via LAN, refer to the communication flow indicated below.
+The following is an example of the communication flow when the [NETWORK] menu → [NETWORK CONTROL] 
+→ [COMMAND SESSION PROLONG] is set to [0SEC.].
+Server: Projector
+Client: Control device such as a computer
+Connection request
+ServerClient
+Sending of key
+Sending of command 1
+Responding to command 1
+Disconnection
+Connection request
+Sending of key
+Sending of command 2
+Responding to command 2
+Disconnection
+Session 1
+Session 2

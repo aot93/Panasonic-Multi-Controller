@@ -1,0 +1,30 @@
+{
+  "name": "@ppc/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b && node scripts/copy-assets.mjs",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "migrate": "tsx src/db/cli-migrate.ts",
+    "seed": "tsx src/db/cli-seed.ts",
+    "add-device": "tsx src/db/cli-add-device.ts",
+    "test": "node --import tsx --env-file=.env.test --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@ppc/shared": "*",
+    "express": "^4.21.1",
+    "node-cron": "^3.0.3",
+    "socket.io": "^4.8.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.0.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

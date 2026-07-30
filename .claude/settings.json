@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run build --workspace @ppc/shared 2>&1 | Select-Object -Last 30; npm run build --workspace @ppc/backend 2>&1 | Select-Object -Last 80)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm test --workspace @ppc/backend 2>&1 | Select-String -Pattern \"^ℹ|not ok\")",
+      "PowerShell(Stop-Process -Id 30080 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run package:win 2>&1 | Select-Object -Last 100)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run build --workspace @ppc/frontend 2>&1 | Select-Object -Last 60)",
+      "Bash(python3 -)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run build --workspace @ppc/shared 2>&1 | Select-Object -Last 40)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run build --workspace @ppc/backend 2>&1 | Select-Object -Last 150)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm test --workspace @ppc/backend 2>&1 | Select-Object -Last 250)",
+      "Bash(grep -i \"^data$\")",
+      "PowerShell(Get-Process -Name \"ProjectorControl\",\"node\" -ErrorAction SilentlyContinue)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm test --workspace @ppc/backend 2>&1 | Select-String -Pattern \"^ℹ\")",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run build --workspace @ppc/backend 2>&1 | Select-Object -Last 60)",
+      "PowerShell(Stop-Process -Id 17712 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm test --workspace @ppc/backend 2>&1 | Select-String -Pattern \"^ℹ|not ok|seed complete\"  | Select-Object -First 5,-Last 10)",
+      "Bash(cd \"/c/Users/abeze/Dropbox/Pi_stuff/Python projects/Panasonic Multi Controller\" && grep -m1 \"seed complete\" packages/backend/.test-data/logs/../../.test-data 2>/dev/null; true)",
+      "Read(//c/Users/abeze/Dropbox/Pi_stuff/Python projects/Panasonic Multi Controller/packages/backend/.test-data/**)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm test --workspace @ppc/backend 2>&1 | Select-String -Pattern \"seed complete\" | Select-Object -First 1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run build --workspace @ppc/frontend 2>&1 | Select-Object -Last 80)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm test --workspace @ppc/backend 2>&1 | Select-String -Pattern \"not ok\" -Context 20,5)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm test --workspace @ppc/backend > test-output.txt 2>&1; Select-String -Path test-output.txt -Pattern \"not ok\" -Context 15,10)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; npm run build --workspace @ppc/shared 2>&1 | Select-Object -Last 20; npm run build --workspace @ppc/backend 2>&1 | Select-Object -Last 40; npm run build --workspace @ppc/frontend 2>&1 | Select-Object -Last 40)"
+    ]
+  }
+}
