@@ -37,3 +37,7 @@ packages/frontend/public/tesseract/
 # the actual sources of truth, not these copies.
 packages/frontend/public/UserGuide.md
 packages/frontend/public/LICENSE.txt
+
+# Large reference PDFs, purged from git history (2026-07-30) to keep the
+# repo small — kept here locally, untracked, for reference only.
+_old/*.pdf
