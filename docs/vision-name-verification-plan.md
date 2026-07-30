@@ -201,11 +201,21 @@ protocol.
   once a frame has arrived. Runs OCR on the current frame client-side,
   POSTs the result, shows an inline outcome (✓ / ⚠ / "couldn't read")
   immediately without waiting for a page refresh.
-- **"Verify all" bulk action** on `PreviewGrid.tsx`, sequential (not
-  parallel) — reuses whatever connections are already open (or opens/OCRs/
-  closes one at a time for whichever aren't) rather than opening every
-  device's preview socket simultaneously just to run a check, consistent
-  with Phase 2's "never hit the whole fleet harder than necessary" stance.
+- ~~"Verify all" bulk action on `PreviewGrid.tsx`~~ **Implemented.**
+  Sequential, not parallel. For each visible device: if its tile already
+  has an open connection, reuse it (`DevicePreviewTileHandle`, an
+  imperative ref exposing `isConnected`/`canVerify`/`verifyName` — see
+  DevicePreviewTile.tsx); otherwise open a short-lived one-shot connection
+  just long enough to grab a single frame, then close it
+  (`lib/previewCapture.ts`'s `captureOnePreviewFrame`). Deliberately never
+  opens a second connection to a device that already has one open — the
+  preview protocol is undocumented/reverse-engineered, and a redundant
+  connection risks disrupting the one already in use, not just wasting a
+  socket. A device whose tile is already mid-check on its own (e.g. a
+  manual click landed on the same device the batch reaches) is skipped for
+  this pass rather than raced or double-connected. One device's failure
+  doesn't stop the rest of the batch; the button shows live progress
+  ("Verifying 3/12…").
 - **Device tile** (`DeviceCard.tsx`): a small badge next to the name once a
   device has ever been checked — reusing the same colour convention as
   health (green/amber/grey for match/mismatch/error), with the detected
@@ -250,11 +260,10 @@ hardware before investing in the rest.
 
 **Milestone 2 — persistence + fleet visibility**
 `device_name_verification` table, the two API routes, `DeviceWithState`
-field, device-tile badge. Per the answered open question #2 (§14), a
-mismatch is informational only — no `events`/CSV logging, and it does not
-affect device health. "Verify all" bulk action not built — each device is
-still verified individually; revisit only if fleet-wide use makes the
-one-at-a-time click tedious in practice.
+field, device-tile badge, and the "Verify all" bulk action (see §9 for how
+it avoids redundant connections). Per the answered open question #2
+(§14), a mismatch is informational only — no `events`/CSV logging, and it
+does not affect device health.
 
 **Milestone 3 — polish / deferred**
 - A bundled template/reference slide generator or downloadable sample
@@ -460,9 +469,30 @@ badge appears on the Devices tab, and confirmed the result survives a full
 page reload — proving it's actually persisted server-side, not just held
 in browser memory.
 
-**Feature request from testing, added to Milestone 3 (§11):** let the user
-edit a device's name directly from the Preview tab, since that's exactly
-where a mismatch is discovered.
+**Feature request from testing, added and implemented:** inline name
+editing directly in the Preview tab (`DevicePreviewTile.tsx`) — since
+that's exactly where a mismatch is discovered. Click the name to edit,
+Enter/Save to commit (reuses `useUpdateDevice`), Escape/Cancel to back
+out. Validated on real hardware.
 
-Next: decide whether/when to start Milestone 3, and commit this Milestone 2
-work to `development`.
+**"Verify all" bulk action — implemented** (originally spec'd in §9,
+initially skipped when Milestone 2 shipped, added afterward). Required
+lifting an imperative handle out of `DevicePreviewTile` (`forwardRef` +
+`useImperativeHandle`, exposing `isConnected`/`canVerify`/`verifyName`) so
+`PreviewGrid` can reuse an already-open tile's connection rather than
+opening a second one to the same device — a real risk, not just an
+optimization, since the preview protocol is undocumented and unclear
+whether it tolerates two simultaneous clients per device. For devices
+with no tile open, a new standalone one-shot helper
+(`lib/previewCapture.ts`) connects, grabs one frame, and closes. The OCR +
+submit step was factored out of `useNameVerification.ts` into
+`lib/nameVerification.ts`'s `runNameVerification()` so both the
+single-tile hook and the bulk path run OCR identically — `useVerifyDeviceName`
+(`useDevices.ts`) now takes `{id, frame}` and does the OCR itself, rather
+than the caller pre-computing `detectedText`. Typecheck/build clean;
+backend suite unaffected (248/248, frontend-only change).
+
+**Milestone 2 is now fully complete**, including the bulk action originally
+scoped for it. Milestone 3 remains: a template-slide generator, a
+configurable threshold in Settings, and deliberately-deferred scheduled
+re-verification.

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { NameVerificationStatus } from '@ppc/shared';
 import { useVerifyDeviceName } from './useDevices';
-import { getOcrWorker } from '../lib/ocrWorker';
 
 export type NameVerificationRunState = 'idle' | 'running' | NameVerificationStatus;
 
@@ -35,11 +34,9 @@ export function useNameVerification(): NameVerificationOutcome {
     setRunState('running');
     setError(null);
     try {
-      const worker = await getOcrWorker();
-      const { data } = await worker.recognize(frame);
-      setDetectedText(data.text);
-      setConfidence(data.confidence);
-      const result = await verifyDeviceName.mutateAsync({ id: deviceId, detectedText: data.text, confidence: data.confidence });
+      const result = await verifyDeviceName.mutateAsync({ id: deviceId, frame });
+      setDetectedText(result.detectedText);
+      setConfidence(result.confidence);
       setRunState(result.status);
     } catch (err) {
       setRunState('error');

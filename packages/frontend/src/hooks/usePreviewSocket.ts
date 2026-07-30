@@ -18,9 +18,17 @@ export interface PreviewControls extends PreviewState {
   captureFrame: () => Blob | null;
 }
 
-/** Fixed port from the projector's own web UI JS (docs/NextSteps.md) — separate from both the NTCONTROL port (1024, configurable per device) and whatever port serves its HTTP admin pages. Unverified beyond that one captured page; not configurable here since nothing suggests it varies. */
-const PREVIEW_WS_PORT = 8080;
-const SUBPROTOCOL = 'pj-cast-protocol';
+/**
+ * Fixed port from the projector's own web UI JS (docs/NextSteps.md) —
+ * separate from both the NTCONTROL port (1024, configurable per device) and
+ * whatever port serves its HTTP admin pages. Unverified beyond that one
+ * captured page; not configurable here since nothing suggests it varies.
+ * Exported so lib/previewCapture.ts's one-shot connection (used by
+ * PreviewGrid's "Verify all" for devices with no tile already open) talks
+ * to the exact same endpoint rather than a second, possibly-drifting copy.
+ */
+export const PREVIEW_WS_PORT = 8080;
+export const PREVIEW_SUBPROTOCOL = 'pj-cast-protocol';
 
 /**
  * Talks the projector's own undocumented live-preview protocol directly
@@ -73,7 +81,7 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
     setStatus('connecting');
     setError(null);
 
-    const socket = new WebSocket(`ws://${host}:${PREVIEW_WS_PORT}`, SUBPROTOCOL);
+    const socket = new WebSocket(`ws://${host}:${PREVIEW_WS_PORT}`, PREVIEW_SUBPROTOCOL);
     socket.binaryType = 'blob';
     socketRef.current = socket;
 

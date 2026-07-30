@@ -1,7 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import type { DeviceWithState } from '@ppc/shared';
+import { devicesApi } from '../lib/api';
+import { runNameVerification } from '../lib/nameVerification';
+import { captureOnePreviewFrame } from '../lib/previewCapture';
+import { queryKeys } from '../lib/queryKeys';
 import { useDevices } from '../hooks/useDevices';
 import { useGroups } from '../hooks/useGroups';
-import { DevicePreviewTile } from './DevicePreviewTile';
+import { DevicePreviewTile, type DevicePreviewTileHandle } from './DevicePreviewTile';
 
 /**
  * NextSteps.md phase 2: live preview of each projector's actual projected
@@ -25,9 +31,15 @@ import { DevicePreviewTile } from './DevicePreviewTile';
 export function PreviewGrid() {
   const { data: devices = [] } = useDevices();
   const { data: groups = [] } = useGroups();
+  const queryClient = useQueryClient();
   const [enabledIds, setEnabledIds] = useState<Set<number>>(new Set());
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null);
+  const [bulkVerifyProgress, setBulkVerifyProgress] = useState<{ done: number; total: number } | null>(null);
+  // Grid-tile handles only, keyed by device id — never the expanded modal's
+  // instance (see its DevicePreviewTile below), which would collide with
+  // the same device's grid-tile entry here.
+  const tileHandles = useRef(new Map<number, DevicePreviewTileHandle>());
 
   const enabledDevices = devices.filter((d) => d.enabled);
   const visibleDevices =
@@ -43,6 +55,37 @@ export function PreviewGrid() {
   }
 
   const expandedDevice = enabledDevices.find((d) => d.id === expandedId) ?? null;
+
+  /**
+   * "Verify all" (docs/vision-name-verification-plan.md §9/§11) — sequential,
+   * not parallel, and never opens a second connection to a device whose
+   * tile already has one open (see DevicePreviewTileHandle.isConnected and
+   * lib/previewCapture.ts's own doc comment for why). One device's failure
+   * doesn't stop the rest of the batch.
+   */
+  async function verifyAll() {
+    setBulkVerifyProgress({ done: 0, total: visibleDevices.length });
+    for (let i = 0; i < visibleDevices.length; i++) {
+      const device: DeviceWithState = visibleDevices[i]!;
+      try {
+        const handle = tileHandles.current.get(device.id);
+        if (handle?.isConnected()) {
+          if (handle.canVerify()) await handle.verifyName();
+          // else: already mid-check on its own (e.g. a manual click) —
+          // skip rather than race it or open a second connection.
+        } else {
+          const frame = await captureOnePreviewFrame(device.host);
+          if (frame) await runNameVerification(device.id, frame);
+          else await devicesApi.verifyName(device.id, { detectedText: null });
+          await queryClient.invalidateQueries({ queryKey: queryKeys.devices });
+        }
+      } catch (err) {
+        console.error(`[preview] "Verify all" failed for device ${device.id}:`, err);
+      }
+      setBulkVerifyProgress({ done: i + 1, total: visibleDevices.length });
+    }
+    setBulkVerifyProgress(null);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -75,6 +118,15 @@ export function PreviewGrid() {
             className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-50"
           >
             Stop all
+          </button>
+          <button
+            type="button"
+            onClick={() => void verifyAll()}
+            disabled={visibleDevices.length === 0 || bulkVerifyProgress !== null}
+            title="Checks every visible device's configured name against its live preview, one at a time"
+            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-50"
+          >
+            {bulkVerifyProgress ? `Verifying ${bulkVerifyProgress.done}/${bulkVerifyProgress.total}…` : 'Verify all'}
           </button>
         </div>
       </div>
@@ -119,6 +171,10 @@ export function PreviewGrid() {
           {visibleDevices.map((device) => (
             <DevicePreviewTile
               key={device.id}
+              ref={(handle) => {
+                if (handle) tileHandles.current.set(device.id, handle);
+                else tileHandles.current.delete(device.id);
+              }}
               deviceId={device.id}
               host={device.host}
               name={device.name}

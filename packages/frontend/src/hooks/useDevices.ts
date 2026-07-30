@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TelemetryMetric } from '@ppc/shared';
 import { devicesApi, type BulkCreateDevicesInput, type CreateDeviceInput, type UpdateDeviceInput } from '../lib/api';
+import { runNameVerification } from '../lib/nameVerification';
 import { queryKeys } from '../lib/queryKeys';
 
 export function useDevices() {
@@ -72,11 +73,11 @@ export function useClearDeviceCredentials() {
   });
 }
 
+/** Runs OCR on `frame` and submits it — see lib/nameVerification.ts for why this owns the OCR step rather than just POSTing a pre-computed result. */
 export function useVerifyDeviceName() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, detectedText, confidence }: { id: number; detectedText: string | null; confidence?: number | null }) =>
-      devicesApi.verifyName(id, { detectedText, confidence }),
+    mutationFn: ({ id, frame }: { id: number; frame: Blob }) => runNameVerification(id, frame),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.devices }),
   });
 }

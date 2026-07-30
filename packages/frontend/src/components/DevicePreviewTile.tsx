@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { forwardRef, useImperativeHandle, useState } from 'react';
 import { useUpdateDevice } from '../hooks/useDevices';
 import { useNameVerification } from '../hooks/useNameVerification';
 import { usePreviewSocket } from '../hooks/usePreviewSocket';
@@ -11,6 +11,24 @@ interface DevicePreviewTileProps {
   /** Omitted in the expanded modal — opening/closing the modal is what starts/stops that instance's connection. */
   onToggle?: () => void;
   onExpand?: () => void;
+}
+
+/**
+ * Imperative escape hatch for PreviewGrid's "Verify all" bulk action
+ * (docs/vision-name-verification-plan.md §9/§11): lets it reuse a tile's
+ * already-open connection instead of opening a redundant second one to the
+ * same device (see lib/previewCapture.ts for the standalone path used when
+ * no tile is open). Not attached to the expanded-modal instance — see
+ * PreviewGrid.tsx — since that would collide with the grid tile's own
+ * handle for the same device id.
+ */
+export interface DevicePreviewTileHandle {
+  /** True whenever this tile has its own open preview connection, busy or not — "Verify all" must never open a second connection while this is true. */
+  isConnected: () => boolean;
+  /** True only when this tile's connection has a frame ready and isn't already mid-check. */
+  canVerify: () => boolean;
+  /** Runs this tile's own "Verify Name" flow over its already-open connection. */
+  verifyName: () => Promise<void>;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -37,7 +55,10 @@ const NAME_CHECK_CLASS: Record<string, string> = {
 };
 
 /** One device's live preview — the projector's own image, streamed over its undocumented preview WebSocket (see usePreviewSocket). Reused at thumbnail size (grid, via `onExpand`) and full size (expanded modal, without it). */
-export function DevicePreviewTile({ deviceId, host, name, enabled, onToggle, onExpand }: DevicePreviewTileProps) {
+export const DevicePreviewTile = forwardRef<DevicePreviewTileHandle, DevicePreviewTileProps>(function DevicePreviewTile(
+  { deviceId, host, name, enabled, onToggle, onExpand },
+  ref,
+) {
   const preview = usePreviewSocket(host, enabled);
   const nameCheck = useNameVerification();
   const updateDevice = useUpdateDevice();
@@ -45,6 +66,17 @@ export function DevicePreviewTile({ deviceId, host, name, enabled, onToggle, onE
   // imageUrl and the frame captureFrame() would return are set together in
   // usePreviewSocket, so this doubles as "is there a frame to check right now".
   const canVerifyName = preview.status === 'connected' && preview.imageUrl !== null && nameCheck.runState !== 'running';
+
+  async function verifyNow(): Promise<void> {
+    const frame = preview.captureFrame();
+    if (frame) await nameCheck.verify(deviceId, frame);
+  }
+
+  useImperativeHandle(ref, () => ({
+    isConnected: () => preview.status === 'connected',
+    canVerify: () => canVerifyName,
+    verifyName: verifyNow,
+  }));
 
   // Milestone 3 (docs/vision-name-verification-plan.md §11): edit the name
   // right where a mismatch is discovered, rather than needing the Devices
@@ -167,10 +199,7 @@ export function DevicePreviewTile({ deviceId, host, name, enabled, onToggle, onE
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
           <button
             type="button"
-            onClick={() => {
-              const frame = preview.captureFrame();
-              if (frame) void nameCheck.verify(deviceId, frame);
-            }}
+            onClick={() => void verifyNow()}
             disabled={!canVerifyName}
             title="Runs OCR on the current frame and checks it against this device's configured name"
             className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700 disabled:opacity-50"
@@ -189,4 +218,4 @@ export function DevicePreviewTile({ deviceId, host, name, enabled, onToggle, onE
       )}
     </div>
   );
-}
+});
