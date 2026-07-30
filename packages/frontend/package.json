@@ -4,13 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node ../../scripts/copy-static-docs.mjs",
     "dev": "vite",
+    "prebuild": "node ../../scripts/copy-static-docs.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@ppc/shared": "*",
     "@tanstack/react-query": "^5.59.20",
+    "marked": "^14.1.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "socket.io-client": "^4.8.1",

@@ -39,6 +39,13 @@ export const MIGRATIONS_DIR = packaged ? resolve(exeDir(), 'migrations') : resol
 /** Built frontend, served as static files from this same server. */
 export const PUBLIC_DIR = packaged ? resolve(exeDir(), 'public') : resolve(compiledFileDir(), 'public');
 
+/**
+ * User-facing release number shown in the About page and `/api/health` —
+ * deliberately not tied to package.json's npm/semver version. Bump by 0.1
+ * per release (1.0, 1.1, 1.2, ...); this is the one place that changes.
+ */
+export const APP_VERSION = '1.0';
+
 export const HTTP_PORT = Number(process.env.PPC_PORT ?? 8080);
 
 /** Bind address. 0.0.0.0 so phones and tablets on the LAN can reach it. */

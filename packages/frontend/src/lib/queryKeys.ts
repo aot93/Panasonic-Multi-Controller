@@ -12,4 +12,6 @@ export const queryKeys = {
   events: (deviceId?: number, severity?: string) => ['events', deviceId ?? 'all', severity ?? 'all'] as const,
   serverHealth: ['server', 'health'] as const,
   pollerStatus: ['poller', 'status'] as const,
+  userGuide: ['about', 'user-guide'] as const,
+  licenseText: ['about', 'license'] as const,
 };

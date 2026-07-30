@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AboutPage } from './components/AboutPage';
 import { AnalyticsPane } from './components/AnalyticsPane';
 import { BatchActionBar } from './components/BatchActionBar';
 import { CommandCatalogueManager } from './components/CommandCatalogueManager';
@@ -17,8 +18,8 @@ import { useGroups } from './hooks/useGroups';
 import { usePollerStatus, useSetPollerPaused } from './hooks/usePollerStatus';
 import { useServerInfo } from './hooks/useServerInfo';
 
-type Tab = 'devices' | 'macros' | 'preview' | 'logs' | 'settings';
-const TABS: Tab[] = ['devices', 'macros', 'preview', 'logs', 'settings'];
+type Tab = 'devices' | 'macros' | 'preview' | 'logs' | 'settings' | 'about';
+const TABS: Tab[] = ['devices', 'macros', 'preview', 'logs', 'settings', 'about'];
 
 export function App() {
   const [tab, setTab] = useState<Tab>('devices');
@@ -124,6 +125,8 @@ export function App() {
           <ProjectFileManager />
         </div>
       )}
+
+      {tab === 'about' && <AboutPage />}
 
       {tab === 'devices' && <BatchActionBar selectedIds={selectedIds} onClear={() => setSelectedIds(new Set())} />}
       {analyticsDeviceId !== null && (

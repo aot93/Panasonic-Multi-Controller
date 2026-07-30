@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Server as SocketServer } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '@ppc/shared';
-import { HTTP_PORT, PUBLIC_DIR } from './config.js';
+import { APP_VERSION, HTTP_PORT, PUBLIC_DIR } from './config.js';
 import { getDb } from './db/index.js';
 import { errorHandler } from './http/error-handler.js';
 import { lanAddresses } from './util/network.js';
@@ -35,7 +35,7 @@ export function buildServer() {
     const { count } = db.prepare('SELECT COUNT(*) AS count FROM devices').get() as { count: number };
     res.json({
       ok: true,
-      version: '0.1.0',
+      version: APP_VERSION,
       phase: 4,
       devices: count,
       uptimeSec: Math.round(process.uptime()),

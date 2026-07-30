@@ -331,3 +331,7 @@ Environment variables (all optional, see `packages/backend/src/config.ts`):
 | `PPC_DATA_DIR` | `./data` | Where the SQLite file and encryption key live |
 | `PPC_DB_PATH` | `<data dir>/projectors.sqlite` | Override the database file location directly |
 | `PPC_SECRET_KEY` | *(generated)* | 32-byte hex key for encrypting stored projector passwords; auto-generated into `<data dir>/secret.key` if unset |
+
+## License
+
+MIT — see [LICENSE](LICENSE).

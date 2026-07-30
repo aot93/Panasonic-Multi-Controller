@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Centralised monitoring and control for a fleet of Panasonic projectors over NTCONTROL (TCP/1024).",
+  "license": "MIT",
   "workspaces": [
     "packages/shared",
     "packages/backend",
