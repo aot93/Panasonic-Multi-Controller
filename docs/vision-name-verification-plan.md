@@ -3,11 +3,10 @@
 **Status: Milestones 1 and 2 complete and validated on real hardware**
 (client-side OCR + "Verify Name" button, backend persistence, device-tile
 badge, "Verify all" bulk action, inline rename), **plus Milestone 3's
-configurable threshold setting** — living only on the `development`
-branch, not yet merged to `main`. Everything through the previous
-commit is committed; the threshold setting is not yet committed. The
-template-slide generator and scheduled re-verification were deliberately
-skipped. See §15 for the full build/validation history.
+configurable threshold setting.** Merged to `main` and shipped as part of
+the v1.0 release. The template-slide generator and scheduled
+re-verification were deliberately skipped. See §15 for the full
+build/validation history.
 
 ## 1. The ask, verbatim
 

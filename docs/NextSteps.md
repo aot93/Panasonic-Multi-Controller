@@ -1,6 +1,7 @@
 Next Steps for multi projector control.
 
-Phase 1 and 2 are now completed move straight to phase 3
+Phases 1 through 4 are now all completed (see docs/PROGRESS.md for the
+full history). No further phases queued here yet.
 
 
 

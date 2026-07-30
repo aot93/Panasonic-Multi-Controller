@@ -38,7 +38,7 @@ knowledge required.
 
 ## 3. Overview of functions
 
-The app is organised into five tabs across the top of the screen.
+The app is organised into six tabs across the top of the screen.
 
 ### Devices
 
@@ -98,6 +98,12 @@ it happened.
 - Save your whole setup — projectors, groups, commands, macros — to a
   file, or load one back in. Handy for backups or moving to a new
   computer. Login details are never included in this file.
+
+### About
+
+What version you're running, the license this app is provided under, and
+a copy of this very guide — all viewable without leaving the app. Also has
+a contact link if you need to report a problem or ask a question.
 
 ### Always visible
 

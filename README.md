@@ -11,21 +11,53 @@ spec and `docs/protocol-notes.md` for protocol implementation notes.
 required. See `docs/UserGuide.md` (also rendered in-app, About tab) for
 setup and usage.
 
-This repo is currently **private** during an invite-only beta — the link
-above only works if you're logged into GitHub as a collaborator with
-access. It'll become a public, no-login download once the beta period
-ends.
+This repo is currently **private**, in public beta with invited testers —
+the link above only works if you're logged into GitHub as a collaborator
+with access. It'll become a fully public, no-login download once the beta
+period ends.
 
-**Status: Phase 7 packaging done (Windows only), real-hardware testing
-succeeded against 192.168.0.101–122, `docs/NextSteps.md` Phases 1 and 2 are
-complete (10 feature items + live preview, confirmed working against the
-real fleet), real self-diagnosis codes replace the old temperature-threshold
-system, and Phase 3 (built-in command additions + usability, 13 items) is
-done.** Phases 1-6 (scaffolding, NTCONTROL protocol client + credentials,
-device polling + WebSocket layer, Core API, scheduler, macro engine,
-frontend) are done — see `docs/PROGRESS.md` for the full history. 232
-backend tests passing (`npm test --workspace @ppc/backend`). **The packaged
-exe has been rebuilt with the Phase 3 round and is ready for testing.**
+**Status: v1.0 released.** All of `docs/NextSteps.md` Phases 1-4 are done
+(live preview, built-in command/usability additions, auto-numbered
+bulk-add + natural sort + duplicate-name guard), vision-based projector
+name verification is built and validated against real hardware (self-hosted
+OCR, no internet required — see `docs/vision-name-verification-plan.md`),
+and the app ships as a single packaged Windows exe (`npm run package:win`)
+distributed via [GitHub Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest),
+MIT-licensed, with an in-app About page (version, license, and the user
+guide rendered in-app) and a plain-English `docs/UserGuide.md`. 256 backend
+tests passing (`npm test --workspace @ppc/backend`). See `docs/PROGRESS.md`
+for the full phase-by-phase history.
+
+### Latest: vision-based projector name verification, About page, v1.0
+
+Using the live-preview WebSocket (Phase 2, below), the browser runs OCR
+(self-hosted Tesseract.js, fully offline) against a projector's current
+preview frame and checks whether its configured name actually appears on
+screen — flags a mismatch instead of silently trusting the name a device
+was registered under. See `docs/vision-name-verification-plan.md` for the
+full design, milestones, and real-hardware validation notes.
+
+- **"Verify Name" / "Verify all"** — Preview tab, per-device or across
+  every visible device at once (sequential, reuses already-open preview
+  connections rather than opening redundant ones).
+- **Persisted + tunable** — result and detected text persist per device
+  (`device_name_verification` table, device-tile badge); the fuzzy-match
+  similarity threshold is adjustable from the Settings tab rather than a
+  fixed constant.
+- **Inline rename** — fix a wrong name right from its preview tile.
+- **New About tab** — version, MIT license (full text), the user guide
+  rendered in-app, and a contact link, so a non-technical user never needs
+  to read source or `docs/` to get oriented.
+- **Phase 4 (`NextSteps.md`)** — bulk-add-by-IP-range now numbers devices
+  by position in the range instead of naming them after the IP; every
+  device listing sorts numerically (`Projector 2` before `Projector 10`)
+  instead of lexicographically; device names are now guarded against
+  duplicates on create/rename.
+- **Confirmation prompts** added for powering off and removing a device
+  from a group — both are one click away in the batch action bar and had
+  no guard before.
+- **Shift-click range select** on device cards, matching standard
+  file-manager behaviour.
 
 ### Latest: `NextSteps.md` Phase 3 — built-in commands + usability
 
@@ -151,8 +183,10 @@ commands are received and callbacks work. **This machine stays connected to
 that fleet** — anything that would dispatch or newly poll a command against
 it needs to be confirmed first, not assumed safe. See `docs/PROGRESS.md`'s
 real-hardware section for what was checked. `release/win/ProjectorControl.exe`
-has been rebuilt with all of the `NextSteps.md` Phase 1 changes and is ready
-for the next hardware session — remember `scripts/package.mjs` deletes and
+is rebuilt and re-validated against the real fleet as each round of changes
+lands (currently v1.0 — see the top of this file and `docs/PROGRESS.md`),
+published via [GitHub Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest)
+rather than committed to git — remember `scripts/package.mjs` deletes and
 regenerates the whole `release/win/` folder on every rebuild, including any
 `data/` subfolder next to a previous exe (see `docs/PROGRESS.md`).
 
@@ -246,7 +280,8 @@ packages/
     src/triggers/      External TCP/UDP trigger listener + CRUD (phase 4)
     src/scheduler/     node-cron task runner + /api/schedules CRUD (phase 5)
     src/macros/        Macro execution engine + /api/macros CRUD
-    src/settings/      Global credentials CRUD (/api/settings/credentials)
+    src/settings/      Global credentials CRUD (/api/settings/credentials) +
+                       name-verification-threshold.ts (tunable OCR match threshold)
     src/events/        GET /api/events — reads the `events` table (Logs tab)
     src/project/       Save/load a whole config: export-import.ts + /api/project routes
     src/logging/       Per-device CSV error log (error-log.ts)
@@ -254,21 +289,34 @@ packages/
     src/util/          Concurrency limiter, network.ts (lanAddresses — phase 3 item 12)
     src/db/            Schema, migrations, seed data, encryption at rest
   frontend/  React + Tailwind + TanStack Query, built to static files
-    src/lib/           API client, query keys, Socket.io singleton
+    src/lib/           API client, query keys, Socket.io singleton, ocrWorker.ts (self-hosted
+                       Tesseract.js), nameVerification.ts, previewCapture.ts (one-shot preview
+                       frame grab for "Verify all")
     src/hooks/         TanStack Query hooks per resource + useDeviceSocket + useSettings + useEvents +
-                        usePreviewSocket + useServerInfo + usePollerStatus
+                        usePreviewSocket + useServerInfo + usePollerStatus + useNameVerification
     src/components/    DeviceGrid/Card, BatchActionBar, MacroBuilder/Editor, AnalyticsPane, LineChart,
                         CommandPicker (searchable/grouped), InputSelectPicker (slot/type/number),
                         GlobalCredentialsForm, DeviceCredentialsModal, GroupsManager, BulkAddDevicesForm,
-                        EventLogViewer, CommandCatalogueManager, ProjectFileManager,
+                        EventLogViewer, CommandCatalogueManager, ProjectFileManager, AboutPage,
+                        NameVerificationSettingsForm,
                         PreviewGrid/DevicePreviewTile (talks directly to each projector, no backend involved)
+    public/            Vite static assets — vendored Tesseract WASM/lang data (gitignored, see
+                       `npm run setup:ocr-assets`) + UserGuide.md/LICENSE.txt mirrored in by
+                       scripts/copy-static-docs.mjs on every dev/build
 docs/
-  panasonic-command-list.txt   Text extracted from the official command-list PDF
-  ptrq-connection.txt          Text extracted from the official connection appendix PDF
-  protocol-notes.md            Handshake/framing decisions, confirmed vs. open questions
+  panasonic-command-list.txt        Text extracted from the official command-list PDF
+  ptrq-connection.txt               Text extracted from the official connection appendix PDF
+  protocol-notes.md                 Handshake/framing decisions, confirmed vs. open questions
+  vision-name-verification-plan.md  Design + build/validation log for name verification (above)
+  UserGuide.md                      Plain-English guide for non-technical users; also rendered in-app
 scripts/
   package.mjs                  Windows SEA packaging (phase 7) — npm run package:win
-release/                       Packaging output (gitignored) — not committed
+  setup-ocr-assets.mjs         One-time vendoring of Tesseract.js WASM/language data — npm run setup:ocr-assets
+  copy-static-docs.mjs         Mirrors docs/UserGuide.md + LICENSE into packages/frontend/public/
+_old/                           Legacy prototype scripts, staged for review/removal (see docs/PROGRESS.md);
+                                the large reference PDFs were purged from git history and live here
+                                untracked/gitignored — not part of the repo, just this machine
+release/                       Packaging output (gitignored) — not committed; distributed via GitHub Releases
 ```
 
 ## Requirements
@@ -321,6 +369,8 @@ curl -X POST http://localhost:8080/api/dispatch -H 'content-type: application/js
 | POST | `/api/macros/:id/run` | `{ target? }` — falls back to each step's own target override if omitted |
 | GET | `/api/devices/:id/telemetry` | `?metric=&idx=&since=&limit=` — history for the analytics pane; metrics now include `ac_voltage` |
 | GET/PUT/DELETE | `/api/settings/credentials` | Global default `{ username, password }`; GET/PUT never return the password |
+| POST/GET | `/api/devices/:id/verify-name` | Vision-based name check (Preview tab) — POST `{ detectedText, confidence? }`, backend runs the match and persists it |
+| GET/PUT | `/api/settings/name-verification` | `{ similarityThreshold: number }` — tunes the fuzzy-match threshold used above |
 | GET | `/api/events` | `?deviceId=&severity=&since=&limit=` — the error/event log (Logs tab) |
 | GET | `/api/project/export` | Downloads the current config as a portable JSON file (no credentials) |
 | POST | `/api/project/import` | Applies a project file additively — existing rows are never overwritten |
