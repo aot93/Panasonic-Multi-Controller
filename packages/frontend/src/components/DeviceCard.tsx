@@ -20,6 +20,13 @@ const HEALTH_LABEL: Record<string, string> = {
   unknown: 'Unknown',
 };
 
+/** docs/vision-name-verification-plan.md §9 — badge next to the name once a device has ever had "Verify Name" run against it (Preview tab). */
+const NAME_VERIFICATION_BADGE: Record<string, { label: string; className: string }> = {
+  match: { label: '✓ Name', className: 'text-status-ok' },
+  mismatch: { label: '⚠ Name mismatch', className: 'text-status-error' },
+  error: { label: '⚠ Name unverified', className: 'text-status-warning' },
+};
+
 const inputLabel = (value: string) => INPUT_OPTIONS.find((o) => o.value === value)?.label ?? value;
 const aspectLabel = (value: string) => ASPECT_OPTIONS.find((o) => o.value === value)?.label ?? value;
 const screenLabel = (value: string) => SCREEN_SETTING_OPTIONS.find((o) => o.value === value)?.label ?? value;
@@ -182,6 +189,19 @@ export function DeviceCard({ device, selected, onToggleSelected, onOpenAnalytics
           title={state.selfDiagnosis}
         >
           {state.selfDiagnosis}
+        </p>
+      )}
+
+      {device.nameVerification && (
+        <p
+          className={`mt-1 truncate text-xs ${NAME_VERIFICATION_BADGE[device.nameVerification.status]?.className ?? 'text-slate-400'}`}
+          title={
+            device.nameVerification.detectedText
+              ? `Detected: "${device.nameVerification.detectedText.trim()}" (checked ${new Date(device.nameVerification.checkedAt).toLocaleString()})`
+              : `Checked ${new Date(device.nameVerification.checkedAt).toLocaleString()}, nothing legible detected`
+          }
+        >
+          {NAME_VERIFICATION_BADGE[device.nameVerification.status]?.label ?? device.nameVerification.status}
         </p>
       )}
 

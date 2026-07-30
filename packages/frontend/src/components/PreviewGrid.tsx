@@ -119,6 +119,7 @@ export function PreviewGrid() {
           {visibleDevices.map((device) => (
             <DevicePreviewTile
               key={device.id}
+              deviceId={device.id}
               host={device.host}
               name={device.name}
               enabled={enabledIds.has(device.id) && expandedId !== device.id}
@@ -146,7 +147,7 @@ export function PreviewGrid() {
                 ✕
               </button>
             </div>
-            <DevicePreviewTile host={expandedDevice.host} name={expandedDevice.name} enabled />
+            <DevicePreviewTile deviceId={expandedDevice.id} host={expandedDevice.host} name={expandedDevice.name} enabled />
           </div>
         </div>
       )}

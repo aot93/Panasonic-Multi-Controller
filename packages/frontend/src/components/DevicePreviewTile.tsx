@@ -2,6 +2,7 @@ import { useNameVerification } from '../hooks/useNameVerification';
 import { usePreviewSocket } from '../hooks/usePreviewSocket';
 
 interface DevicePreviewTileProps {
+  deviceId: number;
   host: string;
   name: string;
   enabled: boolean;
@@ -34,7 +35,7 @@ const NAME_CHECK_CLASS: Record<string, string> = {
 };
 
 /** One device's live preview — the projector's own image, streamed over its undocumented preview WebSocket (see usePreviewSocket). Reused at thumbnail size (grid, via `onExpand`) and full size (expanded modal, without it). */
-export function DevicePreviewTile({ host, name, enabled, onToggle, onExpand }: DevicePreviewTileProps) {
+export function DevicePreviewTile({ deviceId, host, name, enabled, onToggle, onExpand }: DevicePreviewTileProps) {
   const preview = usePreviewSocket(host, enabled);
   const nameCheck = useNameVerification();
   const canExpand = Boolean(onExpand) && preview.status === 'connected';
@@ -102,7 +103,7 @@ export function DevicePreviewTile({ host, name, enabled, onToggle, onExpand }: D
             type="button"
             onClick={() => {
               const frame = preview.captureFrame();
-              if (frame) void nameCheck.verify(name, frame);
+              if (frame) void nameCheck.verify(deviceId, frame);
             }}
             disabled={!canVerifyName}
             title="Runs OCR on the current frame and checks it against this device's configured name"

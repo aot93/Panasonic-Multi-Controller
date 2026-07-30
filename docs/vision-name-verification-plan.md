@@ -1,9 +1,10 @@
 # Vision-based projector name verification — design plan
 
-**Status: Milestone 1 implemented and validated on real hardware**
-(client-side OCR + "Verify Name" button, no persistence yet) — living only
-on the `development` branch, not yet merged to `main`, not yet committed.
-See §15 for the full build/validation history and what Milestone 2 covers
+**Status: Milestones 1 and 2 implemented and validated on real hardware**
+(client-side OCR + "Verify Name" button, backend persistence, device-tile
+badge) — living only on the `development` branch, not yet merged to
+`main`. Milestone 1 is committed; Milestone 2 is not yet committed. See
+§15 for the full build/validation history and what Milestone 3 covers
 next.
 
 ## 1. The ask, verbatim
@@ -249,12 +250,22 @@ hardware before investing in the rest.
 
 **Milestone 2 — persistence + fleet visibility**
 `device_name_verification` table, the two API routes, `DeviceWithState`
-field, device-tile badge, mismatch → `events`/CSV logging, "Verify all"
-bulk action.
+field, device-tile badge. Per the answered open question #2 (§14), a
+mismatch is informational only — no `events`/CSV logging, and it does not
+affect device health. "Verify all" bulk action not built — each device is
+still verified individually; revisit only if fleet-wide use makes the
+one-at-a-time click tedious in practice.
 
 **Milestone 3 — polish / deferred**
 - A bundled template/reference slide generator or downloadable sample
   image(s), per the "we will provide sample images" plan.
+- **Inline name editing in the Preview tab** — added to this list from
+  real-hardware testing feedback: while verifying a device's name, let the
+  user correct its configured name right there (`DevicePreviewTile.tsx`),
+  rather than having to navigate to the Devices tab. Directly addresses
+  limitation #1 (§10) — the check can only confirm display-matches-config,
+  so the fastest fix for a caught mismatch is often "the config was wrong,
+  fix it here."
 - Scheduled/automatic re-verification. **Deferred deliberately** — like
   every other addition to the automatic poll cycle in this project, turning
   this into something that runs unattended against real hardware needs the
@@ -419,7 +430,32 @@ rejected as `mismatch`. Both directions now confirmed end-to-end through
 the actual browser UI (live preview capture → self-hosted OCR → shared
 matching logic), not just the Node-side check against static sample images.
 
-**Milestone 1 is complete and validated.** Next step is deciding whether/
-when to start Milestone 2 (persistence, API routes, device-tile badge,
-"Verify all" bulk action — see §11), and committing this work to
-`development`.
+**Milestone 1 is complete, validated, and committed to `development`.**
+
+**Milestone 2 — implemented and validated.** `device_name_verification`
+table (migration `004_name_verification.sql`), `POST`/`GET
+/api/devices/:id/verify-name` (`devices/routes.ts`, upserts by `device_id`
+so re-checking a device replaces its stored result rather than erroring on
+the duplicate key), `DeviceWithState.nameVerification` (`read-model.ts`,
+`LEFT JOIN device_name_verification`), and a badge on the device card
+(`DeviceCard.tsx`) showing the last result with the detected text in a
+tooltip. `useNameVerification.ts` was changed from computing the match
+client-side to just running OCR and POSTing `{detectedText, confidence}` —
+the backend now owns the match decision (`matchDeviceName` runs
+server-side in the route handler), matching §5's recommended split
+exactly. New backend tests cover: null-before-first-check, persisted
+match, the auto-numbered-neighbor mismatch case, null-text → `error`,
+upsert-replaces-not-duplicates, and 404 for an unknown device. Full backend
+suite: 248/248 passing.
+
+Real-hardware validation: verified against a live projector, confirmed the
+badge appears on the Devices tab, and confirmed the result survives a full
+page reload — proving it's actually persisted server-side, not just held
+in browser memory.
+
+**Feature request from testing, added to Milestone 3 (§11):** let the user
+edit a device's name directly from the Preview tab, since that's exactly
+where a mismatch is discovered.
+
+Next: decide whether/when to start Milestone 3, and commit this Milestone 2
+work to `development`.

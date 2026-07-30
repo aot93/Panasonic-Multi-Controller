@@ -6,6 +6,8 @@
  * expressed here so the API contract and the DB stay in step.
  */
 
+import type { NameVerificationResult } from './name-verification.js';
+
 /* ------------------------------------------------------------------ */
 /* Devices                                                             */
 /* ------------------------------------------------------------------ */
@@ -86,6 +88,8 @@ export interface DeviceWithState extends Device {
    * the UI can show "using global" vs "custom" without ever seeing a secret.
    */
   credentialOverride: { username: boolean; password: boolean };
+  /** Last vision-based name-verification result (docs/vision-name-verification-plan.md), null if never checked. */
+  nameVerification: NameVerificationResult | null;
 }
 
 /** Response shape for the global default credentials — never the password itself. */

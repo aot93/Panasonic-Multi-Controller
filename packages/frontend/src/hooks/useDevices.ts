@@ -71,3 +71,12 @@ export function useClearDeviceCredentials() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.devices }),
   });
 }
+
+export function useVerifyDeviceName() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, detectedText, confidence }: { id: number; detectedText: string | null; confidence?: number | null }) =>
+      devicesApi.verifyName(id, { detectedText, confidence }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.devices }),
+  });
+}

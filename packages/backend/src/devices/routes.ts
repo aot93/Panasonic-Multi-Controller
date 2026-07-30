@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { Router } from 'express';
 import { z } from 'zod';
-import type { BulkCreateDeviceResult, TelemetryMetric, TelemetrySample } from '@ppc/shared';
+import { matchDeviceName, type BulkCreateDeviceResult, type TelemetryMetric, type TelemetrySample } from '@ppc/shared';
 import { setDeviceCredentials } from '../credentials/store.js';
 import { asyncHandler } from '../http/async-handler.js';
 import { BadRequestError, NotFoundError, isUniqueConstraintError } from '../http/errors.js';
@@ -50,6 +50,11 @@ const credentialsSchema = z.object({
 });
 
 const groupIdsSchema = z.object({ groupIds: z.array(z.number().int()) });
+
+const verifyNameSchema = z.object({
+  detectedText: z.string().nullable(),
+  confidence: z.number().min(0).max(100).nullable().optional(),
+});
 
 const bulkCreateSchema = z.object({
   namePrefix: z.string().nullable().optional(),
@@ -317,6 +322,45 @@ export function devicesRouter(db: DatabaseSync, poller: Poller): Router {
         .all(params) as unknown as TelemetryRow[];
 
       res.json(rows.map(toSample));
+    }),
+  );
+
+  // Vision-based name verification (docs/vision-name-verification-plan.md),
+  // Milestone 2. The browser already ran OCR on its own live preview frame
+  // (Milestone 1) — this just receives that result, owns the actual
+  // match/mismatch decision (one definition of "counts as a match",
+  // regardless of which tab/device triggered the check), and persists it.
+  // Per the plan's answered open question #2: a mismatch is informational
+  // only — it does not affect device health, and (per the same answer)
+  // nothing is written to `events`/the CSV log here.
+  router.post(
+    '/:id/verify-name',
+    asyncHandler(async (req, res) => {
+      const deviceId = Number(req.params.id);
+      const device = requireDevice(db, deviceId);
+      const body = verifyNameSchema.parse(req.body);
+      const status = matchDeviceName(device.name, body.detectedText);
+
+      db.prepare(
+        `INSERT INTO device_name_verification (device_id, status, detected_text, confidence, checked_at)
+         VALUES (@deviceId, @status, @detectedText, @confidence, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         ON CONFLICT(device_id) DO UPDATE SET
+           status = excluded.status,
+           detected_text = excluded.detected_text,
+           confidence = excluded.confidence,
+           checked_at = excluded.checked_at`,
+      ).run({ deviceId, status, detectedText: body.detectedText, confidence: body.confidence ?? null });
+
+      res.json(requireDevice(db, deviceId).nameVerification);
+    }),
+  );
+
+  router.get(
+    '/:id/verify-name',
+    asyncHandler(async (req, res) => {
+      const deviceId = Number(req.params.id);
+      const device = requireDevice(db, deviceId);
+      res.json(device.nameVerification);
     }),
   );
 

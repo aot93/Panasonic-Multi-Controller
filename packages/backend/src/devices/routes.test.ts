@@ -304,6 +304,125 @@ test('GET /api/devices/:id/telemetry 404s for an unknown device', async () => {
   }
 });
 
+test('GET /api/devices/:id/verify-name is null before any check has run', async () => {
+  const { db, app } = await setup();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host) VALUES (?, ?)').run('Projector 1', '192.168.0.180').lastInsertRowid,
+    );
+    const res = await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`);
+    assert.equal(res.status, 200);
+    assert.equal(await res.json(), null);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/:id/verify-name persists a match and is reflected on the device itself', async () => {
+  const { db, app } = await setup();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host) VALUES (?, ?)').run('Projector 1', '192.168.0.181').lastInsertRowid,
+    );
+    const res = await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: 'Room 204 - Projector 1', confidence: 91 }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { status: string; detectedText: string; confidence: number };
+    assert.equal(body.status, 'match');
+    assert.equal(body.confidence, 91);
+
+    const device = (await (await fetch(`${app.baseUrl}/api/devices/${deviceId}`)).json()) as {
+      nameVerification: { status: string } | null;
+    };
+    assert.equal(device.nameVerification?.status, 'match');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/:id/verify-name rejects the auto-numbered neighbor as a mismatch, not a match', async () => {
+  const { db, app } = await setup();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host) VALUES (?, ?)').run('Projector 1', '192.168.0.182').lastInsertRowid,
+    );
+    const res = await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: 'bez-xps 02\n1280x1080\nProjector 2\n1920x1080\n' }),
+    });
+    const body = (await res.json()) as { status: string };
+    assert.equal(body.status, 'mismatch');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/:id/verify-name with null detectedText is an error, not a mismatch', async () => {
+  const { db, app } = await setup();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host) VALUES (?, ?)').run('Foyer', '192.168.0.183').lastInsertRowid,
+    );
+    const res = await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: null }),
+    });
+    const body = (await res.json()) as { status: string; detectedText: string | null };
+    assert.equal(body.status, 'error');
+    assert.equal(body.detectedText, null);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/:id/verify-name a second time replaces the stored result rather than erroring on the duplicate key', async () => {
+  const { db, app } = await setup();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host) VALUES (?, ?)').run('Foyer', '192.168.0.184').lastInsertRowid,
+    );
+    await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: 'Wrong Room' }),
+    });
+    const second = await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: 'Foyer' }),
+    });
+    assert.equal(second.status, 200);
+    const body = (await second.json()) as { status: string };
+    assert.equal(body.status, 'match');
+
+    const getRes = (await (await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`)).json()) as {
+      status: string;
+    };
+    assert.equal(getRes.status, 'match');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/:id/verify-name 404s for an unknown device', async () => {
+  const { app } = await setup();
+  try {
+    const res = await fetch(`${app.baseUrl}/api/devices/999/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: 'anything' }),
+    });
+    assert.equal(res.status, 404);
+  } finally {
+    await app.close();
+  }
+});
+
 test('credentials: PUT sets a per-device override, DELETE clears it back to the global default', async () => {
   const { db, app } = await setup();
   try {

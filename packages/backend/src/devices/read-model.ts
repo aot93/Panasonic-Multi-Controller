@@ -1,5 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Device, DeviceState, DeviceWithState, HealthState, PowerState } from '@ppc/shared';
+import type {
+  Device,
+  DeviceState,
+  DeviceWithState,
+  HealthState,
+  NameVerificationResult,
+  NameVerificationStatus,
+  PowerState,
+} from '@ppc/shared';
 
 interface DeviceStateRow {
   id: number;
@@ -31,6 +39,10 @@ interface DeviceStateRow {
   last_seen_at: string | null;
   last_error: string | null;
   state_updated_at: string | null;
+  nv_status: NameVerificationStatus | null;
+  nv_detected_text: string | null;
+  nv_confidence: number | null;
+  nv_checked_at: string | null;
 }
 
 interface GroupLinkRow {
@@ -55,9 +67,12 @@ const SELECT_DEVICE_STATE = `
          (d.password_enc IS NOT NULL) AS has_password_override,
          ds.health, ds.power, ds.input, ds.shutter, ds.temp_intake_c, ds.temp_exhaust_c,
          ds.lamp_hours, ds.aspect, ds.screen_setting, ds.self_diagnosis, ds.latency_ms,
-         ds.last_seen_at, ds.last_error, ds.updated_at AS state_updated_at
+         ds.last_seen_at, ds.last_error, ds.updated_at AS state_updated_at,
+         nv.status AS nv_status, nv.detected_text AS nv_detected_text,
+         nv.confidence AS nv_confidence, nv.checked_at AS nv_checked_at
   FROM devices d
   LEFT JOIN device_state ds ON ds.device_id = d.id
+  LEFT JOIN device_name_verification nv ON nv.device_id = d.id
 `;
 
 export function listDevicesWithState(db: DatabaseSync): DeviceWithState[] {
@@ -130,10 +145,22 @@ function toDeviceWithState(row: DeviceStateRow, groupIds: number[]): DeviceWithS
           updatedAt: row.state_updated_at ?? row.updated_at,
         };
 
+  const nameVerification: NameVerificationResult | null =
+    row.nv_status === null
+      ? null
+      : {
+          deviceId: row.id,
+          status: row.nv_status,
+          detectedText: row.nv_detected_text,
+          confidence: row.nv_confidence,
+          checkedAt: row.nv_checked_at!,
+        };
+
   return {
     ...device,
     state,
     groupIds,
     credentialOverride: { username: row.username !== null, password: row.has_password_override === 1 },
+    nameVerification,
   };
 }

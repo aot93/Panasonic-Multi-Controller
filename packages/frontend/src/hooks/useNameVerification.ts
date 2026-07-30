@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { matchDeviceName, type NameVerificationStatus } from '@ppc/shared';
+import type { NameVerificationStatus } from '@ppc/shared';
+import { useVerifyDeviceName } from './useDevices';
 import { getOcrWorker } from '../lib/ocrWorker';
 
 export type NameVerificationRunState = 'idle' | 'running' | NameVerificationStatus;
@@ -8,27 +9,29 @@ export interface NameVerificationOutcome {
   runState: NameVerificationRunState;
   detectedText: string | null;
   confidence: number | null;
-  /** Set only for a hard failure (e.g. the OCR worker itself failed to load) — distinct from a clean `error` runState, which means "OCR ran but found nothing to compare". */
+  /** Set only for a hard failure (e.g. the OCR worker itself failed to load, or the backend request failed) — distinct from a clean `error` runState, which means "OCR ran but found nothing to compare". */
   error: string | null;
-  verify: (deviceName: string, frame: Blob) => Promise<void>;
+  verify: (deviceId: number, frame: Blob) => Promise<void>;
   reset: () => void;
 }
 
 /**
- * Vision-based name verification (docs/vision-name-verification-plan.md) —
- * Milestone 1: runs OCR on a captured preview frame client-side and
- * compares the result against the device's configured name. Client-side
- * only for now — no backend call, no persistence, nothing else in the app
- * knows this ran. See the plan doc for what Milestone 2 (persistence,
- * device-tile badge, events/CSV logging) adds on top of this.
+ * Vision-based name verification (docs/vision-name-verification-plan.md).
+ * OCR runs client-side (Milestone 1, self-hosted Tesseract.js against a
+ * captured preview frame) but the match/mismatch decision and persistence
+ * are the backend's job (Milestone 2, `POST /api/devices/:id/verify-name`)
+ * — one definition of "counts as a match" regardless of which tab/device
+ * triggered the check, and a result that survives a page reload and shows
+ * up on the device tile (see DeviceCard.tsx).
  */
 export function useNameVerification(): NameVerificationOutcome {
   const [runState, setRunState] = useState<NameVerificationRunState>('idle');
   const [detectedText, setDetectedText] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const verifyDeviceName = useVerifyDeviceName();
 
-  async function verify(deviceName: string, frame: Blob): Promise<void> {
+  async function verify(deviceId: number, frame: Blob): Promise<void> {
     setRunState('running');
     setError(null);
     try {
@@ -36,7 +39,8 @@ export function useNameVerification(): NameVerificationOutcome {
       const { data } = await worker.recognize(frame);
       setDetectedText(data.text);
       setConfidence(data.confidence);
-      setRunState(matchDeviceName(deviceName, data.text));
+      const result = await verifyDeviceName.mutateAsync({ id: deviceId, detectedText: data.text, confidence: data.confidence });
+      setRunState(result.status);
     } catch (err) {
       setRunState('error');
       setError(err instanceof Error ? err.message : String(err));

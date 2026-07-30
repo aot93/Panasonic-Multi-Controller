@@ -12,6 +12,7 @@ import type {
   GroupWithCount,
   Macro,
   MacroRunResult,
+  NameVerificationResult,
   ProjectFile,
   ProjectImportResult,
   TelemetryMetric,
@@ -98,6 +99,8 @@ export const devicesApi = {
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return get<TelemetrySample[]>(`/api/devices/${id}/telemetry${suffix}`);
   },
+  verifyName: (id: number, input: { detectedText: string | null; confidence?: number | null }) =>
+    post<NameVerificationResult>(`/api/devices/${id}/verify-name`, input),
 };
 
 /* ------------------------------------------------------------------ */
