@@ -75,10 +75,22 @@ const SELECT_DEVICE_STATE = `
   LEFT JOIN device_name_verification nv ON nv.device_id = d.id
 `;
 
+/**
+ * NextSteps.md Phase 4 item 2: plain SQL `ORDER BY name` puts "Projector 10"
+ * before "Projector 2" (lexicographic). `localeCompare`'s `numeric` option
+ * treats embedded digit runs as numbers instead, giving 1, 2, ... 10, 11
+ * without needing zero-padded names — sorted here, in the one place every
+ * device listing (grid, preview, group displays) draws from, rather than
+ * per-component.
+ */
+function compareDeviceNames(a: DeviceWithState, b: DeviceWithState): number {
+  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 export function listDevicesWithState(db: DatabaseSync): DeviceWithState[] {
-  const rows = db.prepare(`${SELECT_DEVICE_STATE} ORDER BY d.name`).all() as unknown as DeviceStateRow[];
+  const rows = db.prepare(SELECT_DEVICE_STATE).all() as unknown as DeviceStateRow[];
   const groupIdsByDevice = loadGroupIds(db);
-  return rows.map((row) => toDeviceWithState(row, groupIdsByDevice.get(row.id) ?? []));
+  return rows.map((row) => toDeviceWithState(row, groupIdsByDevice.get(row.id) ?? [])).sort(compareDeviceNames);
 }
 
 export function getDeviceWithState(db: DatabaseSync, deviceId: number): DeviceWithState | null {

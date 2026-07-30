@@ -7,6 +7,7 @@ import { asyncHandler } from '../http/async-handler.js';
 import { BadRequestError, NotFoundError, isUniqueConstraintError } from '../http/errors.js';
 import { parseIpRange } from './ip-range.js';
 import type { Poller } from '../poller/poller.js';
+import { getNameVerificationThreshold } from '../settings/name-verification-threshold.js';
 import { getDeviceWithState, listDevicesWithState } from './read-model.js';
 
 const TELEMETRY_METRICS = ['temp_intake', 'temp_exhaust', 'lamp_hours', 'projector_runtime', 'latency_ms'] as const;
@@ -91,8 +92,25 @@ interface InsertDeviceInput {
   pollIntervalSec?: number | null;
 }
 
+/**
+ * Names have no DB-level UNIQUE constraint — unlike host:port, adding one
+ * retroactively risks a migration that fails outright on any install that
+ * already has duplicate names (e.g. from testing before this check
+ * existed), since SQLite can't create a unique index over pre-existing
+ * duplicate values. Checked here instead, at the same point every creation
+ * path already goes through.
+ */
+function assertNameAvailable(db: DatabaseSync, name: string, excludeDeviceId?: number): void {
+  const row =
+    excludeDeviceId === undefined
+      ? db.prepare('SELECT 1 FROM devices WHERE name = ?').get(name)
+      : db.prepare('SELECT 1 FROM devices WHERE name = ? AND id != ?').get(name, excludeDeviceId);
+  if (row) throw new BadRequestError(`A device named "${name}" already exists`);
+}
+
 /** Shared by the single-device and bulk-by-IP-range create routes — the only difference between them is how each handles a thrown BadRequestError (fail the whole request vs. record it per-IP and continue). */
 function insertDevice(db: DatabaseSync, input: InsertDeviceInput): number {
+  assertNameAvailable(db, input.name);
   try {
     const info = db
       .prepare(
@@ -162,7 +180,15 @@ export function devicesRouter(db: DatabaseSync, poller: Poller): Router {
     }),
   );
 
-  /** Add multiple devices at once from an IP range, e.g. 192.168.1.10-192.168.1.20. */
+  /**
+   * Add multiple devices at once from an IP range, e.g.
+   * 192.168.1.10-192.168.1.20. With a name prefix, each device is numbered
+   * by its position in the range ("Projector 1", "Projector 2", ...:
+   * NextSteps.md Phase 4 item 1) rather than named after its IP — the
+   * numbering is positional, not success-based, so a mid-range failure
+   * (e.g. a duplicate host:port) doesn't shift the numbers of the IPs
+   * after it.
+   */
   router.post(
     '/bulk',
     asyncHandler(async (req, res) => {
@@ -174,10 +200,10 @@ export function devicesRouter(db: DatabaseSync, poller: Poller): Router {
       const results: BulkCreateDeviceResult[] = [];
       const createdIds: number[] = [];
 
-      for (const ip of ips) {
+      for (const [index, ip] of ips.entries()) {
         try {
           const deviceId = insertDevice(db, {
-            name: prefix ? `${prefix} ${ip}` : ip,
+            name: prefix ? `${prefix} ${index + 1}` : ip,
             host: ip,
             port,
             pollIntervalSec: body.pollIntervalSec,
@@ -208,6 +234,7 @@ export function devicesRouter(db: DatabaseSync, poller: Poller): Router {
       const deviceId = Number(req.params.id);
       requireDevice(db, deviceId);
       const body = updateDeviceSchema.parse(req.body);
+      if (body.name !== undefined) assertNameAvailable(db, body.name, deviceId);
 
       const sets: string[] = [];
       const params: Record<string, string | number | null> = { id: deviceId };
@@ -339,7 +366,8 @@ export function devicesRouter(db: DatabaseSync, poller: Poller): Router {
       const deviceId = Number(req.params.id);
       const device = requireDevice(db, deviceId);
       const body = verifyNameSchema.parse(req.body);
-      const status = matchDeviceName(device.name, body.detectedText);
+      const threshold = getNameVerificationThreshold(db);
+      const status = matchDeviceName(device.name, body.detectedText, { similarityThreshold: threshold });
 
       db.prepare(
         `INSERT INTO device_name_verification (device_id, status, detected_text, confidence, checked_at)

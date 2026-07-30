@@ -81,7 +81,90 @@ test('POST /api/devices rejects a duplicate host:port with a clean 400, not a ra
   }
 });
 
-test('POST /api/devices/bulk creates a device per IP in the range', async () => {
+test('POST /api/devices rejects a duplicate name with a clean 400', async () => {
+  const { app } = await setup();
+  try {
+    await fetch(`${app.baseUrl}/api/devices`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Foyer', host: '192.168.0.132' }),
+    });
+    const res = await fetch(`${app.baseUrl}/api/devices`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Foyer', host: '192.168.0.133' }),
+    });
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { error: string };
+    assert.match(body.error, /already exists/);
+
+    const listRes = await fetch(`${app.baseUrl}/api/devices`);
+    assert.equal(((await listRes.json()) as unknown[]).length, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/bulk run twice with the same prefix reports the second batch as name collisions, not silent duplicates', async () => {
+  const { app } = await setup();
+  try {
+    await fetch(`${app.baseUrl}/api/devices/bulk`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ namePrefix: 'Projector', startIp: '192.168.2.1', endIp: '192.168.2.2' }),
+    });
+    const res = await fetch(`${app.baseUrl}/api/devices/bulk`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ namePrefix: 'Projector', startIp: '192.168.2.3', endIp: '192.168.2.4' }),
+    });
+    assert.equal(res.status, 201);
+    const results = (await res.json()) as { ip: string; ok: boolean; error?: string }[];
+    assert.ok(results.every((r) => !r.ok));
+    assert.match(results[0]?.error ?? '', /already exists/);
+
+    const listRes = await fetch(`${app.baseUrl}/api/devices`);
+    assert.equal(((await listRes.json()) as unknown[]).length, 2); // only the first batch
+  } finally {
+    await app.close();
+  }
+});
+
+test('PATCH /api/devices/:id rejects renaming to another device\'s name, but allows keeping its own', async () => {
+  const { app } = await setup();
+  try {
+    await fetch(`${app.baseUrl}/api/devices`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Foyer', host: '192.168.0.134' }),
+    });
+    const created = (await (
+      await fetch(`${app.baseUrl}/api/devices`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Lobby', host: '192.168.0.135' }),
+      })
+    ).json()) as { id: number };
+
+    const collision = await fetch(`${app.baseUrl}/api/devices/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Foyer' }),
+    });
+    assert.equal(collision.status, 400);
+
+    const selfRename = await fetch(`${app.baseUrl}/api/devices/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Lobby', location: 'Ground floor' }),
+    });
+    assert.equal(selfRename.status, 200);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/bulk creates a device per IP in the range, numbered by position in the range', async () => {
   const { app } = await setup();
   try {
     const res = await fetch(`${app.baseUrl}/api/devices/bulk`, {
@@ -97,10 +180,36 @@ test('POST /api/devices/bulk creates a device per IP in the range', async () => 
       results.map((r) => r.ip),
       ['192.168.1.10', '192.168.1.11', '192.168.1.12'],
     );
-    assert.equal(results[0]?.device?.name, 'Room 192.168.1.10');
+    assert.deepEqual(
+      results.map((r) => r.device?.name),
+      ['Room 1', 'Room 2', 'Room 3'],
+    );
 
     const listRes = await fetch(`${app.baseUrl}/api/devices`);
     assert.equal(((await listRes.json()) as unknown[]).length, 3);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/bulk numbers by position in the range, not by success — a mid-range failure does not shift later numbers', async () => {
+  const { app } = await setup();
+  try {
+    await fetch(`${app.baseUrl}/api/devices`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Existing', host: '192.168.1.21' }),
+    });
+
+    const res = await fetch(`${app.baseUrl}/api/devices/bulk`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ namePrefix: 'Projector', startIp: '192.168.1.20', endIp: '192.168.1.22' }),
+    });
+    const results = (await res.json()) as { ip: string; ok: boolean; device?: { name: string } }[];
+    assert.equal(results.find((r) => r.ip === '192.168.1.20')?.device?.name, 'Projector 1');
+    assert.equal(results.find((r) => r.ip === '192.168.1.21')?.ok, false);
+    assert.equal(results.find((r) => r.ip === '192.168.1.22')?.device?.name, 'Projector 3');
   } finally {
     await app.close();
   }
@@ -418,6 +527,37 @@ test('POST /api/devices/:id/verify-name 404s for an unknown device', async () =>
       body: JSON.stringify({ detectedText: 'anything' }),
     });
     assert.equal(res.status, 404);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/devices/:id/verify-name honours the tunable name_verification_threshold setting (docs/vision-name-verification-plan.md §11)', async () => {
+  const { db, app } = await setup();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host) VALUES (?, ?)').run('Projector Seven', '192.168.0.185').lastInsertRowid,
+    );
+    const noisy = 'Praj3ct0r S3v3n'; // same fixture as matching.test.ts — mismatch at the default 0.8 threshold
+
+    const atDefault = await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: noisy }),
+    });
+    assert.equal((await atDefault.json() as { status: string }).status, 'mismatch');
+
+    db.prepare(
+      `INSERT INTO settings (key, value) VALUES ('name_verification_threshold', '0.5')
+       ON CONFLICT (key) DO UPDATE SET value = '0.5'`,
+    ).run();
+
+    const atLoweredThreshold = await fetch(`${app.baseUrl}/api/devices/${deviceId}/verify-name`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ detectedText: noisy }),
+    });
+    assert.equal((await atLoweredThreshold.json() as { status: string }).status, 'match');
   } finally {
     await app.close();
   }

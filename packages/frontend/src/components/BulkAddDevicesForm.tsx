@@ -66,7 +66,8 @@ export function BulkAddDevicesForm() {
         <input
           value={namePrefix}
           onChange={(e) => setNamePrefix(e.target.value)}
-          placeholder="Room"
+          placeholder="Projector"
+          title={`Each device is numbered by its position in the range — e.g. "Projector" becomes "Projector 1", "Projector 2", ...`}
           className="mt-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
         />
       </label>

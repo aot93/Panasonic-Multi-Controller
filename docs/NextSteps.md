@@ -184,3 +184,8 @@ Quality of life improvments
 1. When adding projectors using add range, add an automaticly increasing number to each name, exapmle 'projector 1' , 'projector 2', ...
 
 2. Use natural sort order for the cards so they are arranged strictly numerically with out zero padding, example 1,2,... not 1,11,...
+
+Items 1 and 2 are now completed. Testing item 1 surfaced that device names
+had no duplicate guard at all (re-running "Add range" with the same prefix
+silently created two identically-named devices) — fixed: create and
+rename now reject a name already in use by another device.
