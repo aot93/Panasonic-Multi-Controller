@@ -1,3 +1,4 @@
+import { useNameVerification } from '../hooks/useNameVerification';
 import { usePreviewSocket } from '../hooks/usePreviewSocket';
 
 interface DevicePreviewTileProps {
@@ -17,10 +18,29 @@ const STATUS_LABEL: Record<string, string> = {
   closed: 'Disconnected',
 };
 
+/** docs/vision-name-verification-plan.md — client-side-only Milestone 1 (no persistence yet). */
+const NAME_CHECK_LABEL: Record<string, string> = {
+  running: 'Checking…',
+  match: '✓ Name matches',
+  mismatch: '⚠ Name mismatch',
+  error: "⚠ Couldn't read text",
+};
+
+const NAME_CHECK_CLASS: Record<string, string> = {
+  running: 'text-slate-400',
+  match: 'text-status-ok',
+  mismatch: 'text-status-error',
+  error: 'text-status-warning',
+};
+
 /** One device's live preview — the projector's own image, streamed over its undocumented preview WebSocket (see usePreviewSocket). Reused at thumbnail size (grid, via `onExpand`) and full size (expanded modal, without it). */
 export function DevicePreviewTile({ host, name, enabled, onToggle, onExpand }: DevicePreviewTileProps) {
   const preview = usePreviewSocket(host, enabled);
+  const nameCheck = useNameVerification();
   const canExpand = Boolean(onExpand) && preview.status === 'connected';
+  // imageUrl and the frame captureFrame() would return are set together in
+  // usePreviewSocket, so this doubles as "is there a frame to check right now".
+  const canVerifyName = preview.status === 'connected' && preview.imageUrl !== null && nameCheck.runState !== 'running';
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
@@ -75,6 +95,31 @@ export function DevicePreviewTile({ host, name, enabled, onToggle, onExpand }: D
           </button>
         )}
       </div>
+
+      {preview.status === 'connected' && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              const frame = preview.captureFrame();
+              if (frame) void nameCheck.verify(name, frame);
+            }}
+            disabled={!canVerifyName}
+            title="Runs OCR on the current frame and checks it against this device's configured name"
+            className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700 disabled:opacity-50"
+          >
+            {nameCheck.runState === 'running' ? 'Checking…' : 'Verify Name'}
+          </button>
+          {nameCheck.runState !== 'idle' && nameCheck.runState !== 'running' && (
+            <span
+              className={`truncate text-xs ${NAME_CHECK_CLASS[nameCheck.runState] ?? 'text-slate-400'}`}
+              title={nameCheck.detectedText ? `Detected: "${nameCheck.detectedText.trim()}"` : nameCheck.error ?? undefined}
+            >
+              {NAME_CHECK_LABEL[nameCheck.runState] ?? nameCheck.runState}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

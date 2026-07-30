@@ -14,6 +14,8 @@ export interface PreviewState {
 export interface PreviewControls extends PreviewState {
   togglePreshow: () => void;
   reconnect: () => void;
+  /** The most recently received frame, for anything that needs actual pixel data (e.g. OCR) rather than just an `<img src>` — see docs/vision-name-verification-plan.md. Null whenever there's no current image (not yet connected, blanked, HDCP). */
+  captureFrame: () => Blob | null;
 }
 
 /** Fixed port from the projector's own web UI JS (docs/NextSteps.md) — separate from both the NTCONTROL port (1024, configurable per device) and whatever port serves its HTTP admin pages. Unverified beyond that one captured page; not configurable here since nothing suggests it varies. */
@@ -52,6 +54,7 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
 
   const socketRef = useRef<WebSocket | null>(null);
   const imageUrlRef = useRef<string | null>(null);
+  const latestBlobRef = useRef<Blob | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -62,6 +65,7 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
       setPreshowActive(false);
       setPreshowBusy(false);
       setError(null);
+      latestBlobRef.current = null;
       return;
     }
 
@@ -94,6 +98,7 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
         const url = URL.createObjectURL(data);
         revokeImage();
         imageUrlRef.current = url;
+        latestBlobRef.current = data;
         setImageUrl(url);
         setHdcp(false);
         return;
@@ -104,10 +109,12 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
         case 'HDCP':
           setHdcp(true);
           revokeImage();
+          latestBlobRef.current = null;
           setImageUrl(null);
           break;
         case 'BLANK':
           revokeImage();
+          latestBlobRef.current = null;
           setImageUrl(null);
           break;
         case 'REFRESH':
@@ -131,6 +138,7 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
       if (cancelled) return;
       setStatus((s) => (s === 'connecting' ? 'error' : 'closed'));
       revokeImage();
+      latestBlobRef.current = null;
       setImageUrl(null);
     });
 
@@ -149,6 +157,7 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
       socket.close();
       socketRef.current = null;
       revokeImage();
+      latestBlobRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host, enabled, nonce]);
@@ -166,5 +175,9 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
     setNonce((n) => n + 1);
   }
 
-  return { status, imageUrl, hdcp, preshowActive, preshowBusy, error, togglePreshow, reconnect };
+  function captureFrame(): Blob | null {
+    return latestBlobRef.current;
+  }
+
+  return { status, imageUrl, hdcp, preshowActive, preshowBusy, error, togglePreshow, reconnect, captureFrame };
 }

@@ -19,7 +19,8 @@
     "seed": "npm run seed --workspace @ppc/backend",
     "typecheck": "tsc -b && tsc --noEmit -p packages/frontend/tsconfig.json",
     "clean": "node -e \"for (const p of ['shared','backend','frontend']) require('fs').rmSync('packages/'+p+'/dist',{recursive:true,force:true})\"",
-    "package:win": "node scripts/package.mjs win"
+    "package:win": "node scripts/package.mjs win",
+    "setup:ocr-assets": "node scripts/setup-ocr-assets.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.21.5",
