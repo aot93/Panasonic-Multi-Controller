@@ -222,6 +222,9 @@ export const settingsApi = {
   setGlobalCredentials: (username: string, password: string) =>
     put<GlobalCredentialsStatus>('/api/settings/credentials', { username, password }),
   clearGlobalCredentials: () => del<GlobalCredentialsStatus>('/api/settings/credentials'),
+  getNameVerificationSettings: () => get<{ similarityThreshold: number }>('/api/settings/name-verification'),
+  setNameVerificationSettings: (similarityThreshold: number) =>
+    put<{ similarityThreshold: number }>('/api/settings/name-verification', { similarityThreshold }),
 };
 
 /* ------------------------------------------------------------------ */

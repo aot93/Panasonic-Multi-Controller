@@ -8,6 +8,7 @@ import { EventLogViewer } from './components/EventLogViewer';
 import { GlobalCredentialsForm } from './components/GlobalCredentialsForm';
 import { GroupsManager } from './components/GroupsManager';
 import { MacroBuilder } from './components/MacroBuilder';
+import { NameVerificationSettingsForm } from './components/NameVerificationSettingsForm';
 import { PreviewGrid } from './components/PreviewGrid';
 import { ProjectFileManager } from './components/ProjectFileManager';
 import { useDevices } from './hooks/useDevices';
@@ -117,6 +118,7 @@ export function App() {
       {tab === 'settings' && (
         <div className="flex flex-col gap-4">
           <GlobalCredentialsForm />
+          <NameVerificationSettingsForm />
           <GroupsManager />
           <CommandCatalogueManager />
           <ProjectFileManager />

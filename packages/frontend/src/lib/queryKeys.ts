@@ -8,6 +8,7 @@ export const queryKeys = {
   macros: ['macros'] as const,
   macro: (id: number) => ['macros', id] as const,
   globalCredentials: ['settings', 'credentials'] as const,
+  nameVerificationSettings: ['settings', 'name-verification'] as const,
   events: (deviceId?: number, severity?: string) => ['events', deviceId ?? 'all', severity ?? 'all'] as const,
   serverHealth: ['server', 'health'] as const,
   pollerStatus: ['poller', 'status'] as const,

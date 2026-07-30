@@ -22,3 +22,15 @@ export function useClearGlobalCredentials() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.globalCredentials }),
   });
 }
+
+export function useNameVerificationSettings() {
+  return useQuery({ queryKey: queryKeys.nameVerificationSettings, queryFn: settingsApi.getNameVerificationSettings });
+}
+
+export function useSetNameVerificationSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (similarityThreshold: number) => settingsApi.setNameVerificationSettings(similarityThreshold),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.nameVerificationSettings }),
+  });
+}

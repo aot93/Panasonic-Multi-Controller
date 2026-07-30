@@ -1,11 +1,13 @@
 # Vision-based projector name verification — design plan
 
-**Status: Milestones 1 and 2 implemented and validated on real hardware**
+**Status: Milestones 1 and 2 complete and validated on real hardware**
 (client-side OCR + "Verify Name" button, backend persistence, device-tile
-badge) — living only on the `development` branch, not yet merged to
-`main`. Milestone 1 is committed; Milestone 2 is not yet committed. See
-§15 for the full build/validation history and what Milestone 3 covers
-next.
+badge, "Verify all" bulk action, inline rename), **plus Milestone 3's
+configurable threshold setting** — living only on the `development`
+branch, not yet merged to `main`. Everything through the previous
+commit is committed; the threshold setting is not yet committed. The
+template-slide generator and scheduled re-verification were deliberately
+skipped. See §15 for the full build/validation history.
 
 ## 1. The ask, verbatim
 
@@ -282,14 +284,19 @@ does not affect device health.
   auto-cleared, a known small inconsistency (a stale checked-against-the-
   old-name result sitting next to the new name) not worth solving until it
   proves confusing in practice.
-- Scheduled/automatic re-verification. **Deferred deliberately** — like
-  every other addition to the automatic poll cycle in this project, turning
-  this into something that runs unattended against real hardware needs the
-  same explicit go-ahead already established as standing practice here,
-  and a scheduled *image-streaming* check is a heavier ask than a scheduled
-  NTCONTROL query.
-- Configurable matching threshold exposed in Settings rather than a fixed
-  constant.
+- Scheduled/automatic re-verification. **Deliberately skipped** — the user
+  chose to prioritize the threshold setting instead and leave this and the
+  template-slide generator (above) undone for now.
+- ~~Configurable matching threshold exposed in Settings~~ **Implemented.**
+  `name_verification_threshold` setting (migration `005`, default 0.8,
+  seeded on every install), `GET`/`PUT /api/settings/name-verification`
+  (`settings/routes.ts`), read by the verify-name route via a shared
+  `getNameVerificationThreshold()` helper
+  (`settings/name-verification-threshold.ts` — single source of truth for
+  the default so the settings route and the verify route can never drift
+  to different fallbacks) and passed to `matchDeviceName`'s
+  `similarityThreshold` option. UI: a slider (50-100%) in the Settings tab
+  (`NameVerificationSettingsForm.tsx`).
 
 ## 12. Testing strategy
 
@@ -493,6 +500,21 @@ than the caller pre-computing `detectedText`. Typecheck/build clean;
 backend suite unaffected (248/248, frontend-only change).
 
 **Milestone 2 is now fully complete**, including the bulk action originally
-scoped for it. Milestone 3 remains: a template-slide generator, a
-configurable threshold in Settings, and deliberately-deferred scheduled
-re-verification.
+scoped for it.
+
+**Milestone 3 — threshold setting implemented; the rest skipped by
+choice.** The user chose to build the configurable similarity threshold
+and explicitly skip the template-slide generator and scheduled
+re-verification for now. New migration `005_name_verification_threshold.sql`
+seeds `name_verification_threshold` (default 0.8); `GET`/`PUT
+/api/settings/name-verification` read/write it; the verify-name route
+(`devices/routes.ts`) now passes it to `matchDeviceName` instead of relying
+on the shared package's own hardcoded default. A new
+`settings/name-verification-threshold.ts` holds the one shared default +
+lookup so the settings route and the verify route can't drift to
+different fallback values. Frontend: `NameVerificationSettingsForm.tsx`, a
+slider (50-100%) in the Settings tab, following `GlobalCredentialsForm.tsx`'s
+layout conventions. Three new backend tests (default value, PUT round-trip,
+threshold actually changing the match/mismatch outcome via the same noisy
+fixture from `matching.test.ts`) plus three for the settings route itself
+— full suite: 252/252 passing. Typecheck/build clean on both workspaces.
