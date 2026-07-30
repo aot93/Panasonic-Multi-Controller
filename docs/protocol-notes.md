@@ -6,16 +6,20 @@ out to be wrong. Read this before touching `packages/backend/src/protocol/`.
 
 ## Sources, ranked by trust
 
-1. **`PTRQ-CONNECTION.pdf`** (repo `Claude/` folder, extracted to
+The source files below moved to `_old/` (pending review/removal — not
+referenced by any code, just historical reference material this doc cites).
+Paths here reflect that; update again if they're actually deleted.
+
+1. **`PTRQ-CONNECTION.pdf`** (`_old/PTRQ-CONNECTION.pdf`, extracted to
    `docs/ptrq-connection.txt`) — Panasonic's official "Control commands via
    LAN" appendix. This is now the authority on the handshake, framing, and
    error format. Everything below is sourced from it unless noted.
-2. **`rq35_rz34_command_list_1606346081.8208.pdf`** (`docs/panasonic-command-list.txt`)
-   — authority on command *bodies* (`VSE:6`, `QTM:0`, etc). Does not cover
-   handshake/framing at all (confirmed by grepping it for "NTCONTROL" — no
-   hits).
+2. **`rq35_rz34_command_list_1606346081.8208.pdf`** (`_old/rq35_rz34_command_list_1606346081.8208.pdf`,
+   extracted to `docs/panasonic-command-list.txt`) — authority on command
+   *bodies* (`VSE:6`, `QTM:0`, etc). Does not cover handshake/framing at all
+   (confirmed by grepping it for "NTCONTROL" — no hits).
 3. **`panasonic_aspectQ.py`, `panasonic_setup_Script.py`, `panasonic_query.py`**
-   (repo root) — working scripts against real hardware. Useful for real
+   (`_old/`) — working scripts against real hardware. Useful for real
    credentials-in-practice and confirm the general shape, but see "Where the
    old scripts are subtly wrong" below — they predate this confirmed spec and
    get one detail wrong in a way that could silently misread a device's power

@@ -1054,3 +1054,24 @@ are untouched (they always carry a real `code`, matching what the user said
 already reads well). One new test (226 backend tests passing, up from 225)
 confirms both halves: health/event still fire, but the message contains no
 "position" text.
+
+## Repo cleanup: legacy scripts/PDFs moved to `_old/` (production-readiness pass)
+
+Ahead of building a release exe, the four original prototype Python scripts
+(`panasonic_aspectQ-GUI.py`, `panasonic_aspectQ.py`, `panasonic_query.py`,
+`panasonic_setup_Script.py` — previously "repo root") and three reference
+PDFs (`PTRQ-CONNECTION.pdf`, `PT-RQ35K2_Series_manual_en.pdf`,
+`rq35_rz34_command_list_1606346081.8208.pdf`, plus the original
+`claude-code-kickoff-prompt_2.md` — previously in `Claude/`) moved to a new
+`_old/` folder, staged for the user's manual review/removal rather than
+deleted outright.
+
+**Not simple housekeeping** — `docs/protocol-notes.md` cites the Python
+scripts and two of the PDFs as ranked "sources of trust" for the confirmed
+NTCONTROL wire protocol, so this isn't dead weight in the way it might look
+at a glance. Its path references were updated to point at `_old/` rather
+than left dangling. `Claude/Panasonic_Projector_App_Spec_v2.md` (the actual
+spec, still cited from `README.md`) was deliberately left in place — only
+the kickoff prompt sitting alongside it moved. Historical entries earlier
+in this file that say "repo root" describe the layout as it was at the
+time and are left as-is; only forward-looking references were fixed.
