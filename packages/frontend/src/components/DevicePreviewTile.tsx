@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useUpdateDevice } from '../hooks/useDevices';
 import { useNameVerification } from '../hooks/useNameVerification';
 import { usePreviewSocket } from '../hooks/usePreviewSocket';
 
@@ -19,7 +21,7 @@ const STATUS_LABEL: Record<string, string> = {
   closed: 'Disconnected',
 };
 
-/** docs/vision-name-verification-plan.md — client-side-only Milestone 1 (no persistence yet). */
+/** docs/vision-name-verification-plan.md — OCR runs client-side; the match decision and persistence are the backend's (Milestone 2). */
 const NAME_CHECK_LABEL: Record<string, string> = {
   running: 'Checking…',
   match: '✓ Name matches',
@@ -38,15 +40,79 @@ const NAME_CHECK_CLASS: Record<string, string> = {
 export function DevicePreviewTile({ deviceId, host, name, enabled, onToggle, onExpand }: DevicePreviewTileProps) {
   const preview = usePreviewSocket(host, enabled);
   const nameCheck = useNameVerification();
+  const updateDevice = useUpdateDevice();
   const canExpand = Boolean(onExpand) && preview.status === 'connected';
   // imageUrl and the frame captureFrame() would return are set together in
   // usePreviewSocket, so this doubles as "is there a frame to check right now".
   const canVerifyName = preview.status === 'connected' && preview.imageUrl !== null && nameCheck.runState !== 'running';
 
+  // Milestone 3 (docs/vision-name-verification-plan.md §11): edit the name
+  // right where a mismatch is discovered, rather than needing the Devices
+  // tab — requested from real-hardware testing of "Verify Name".
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(name);
+
+  function startRename() {
+    setNameDraft(name);
+    setIsRenaming(true);
+  }
+
+  function cancelRename() {
+    setIsRenaming(false);
+  }
+
+  function saveRename() {
+    const trimmed = nameDraft.trim();
+    if (trimmed && trimmed !== name) {
+      updateDevice.mutate({ id: deviceId, input: { name: trimmed } });
+      nameCheck.reset();
+    }
+    setIsRenaming(false);
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium">{name}</span>
+        {isRenaming ? (
+          <div className="flex flex-1 items-center gap-1">
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveRename();
+                if (e.key === 'Escape') cancelRename();
+              }}
+              className="w-full min-w-0 rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-sm font-medium text-slate-100"
+            />
+            <button
+              type="button"
+              onClick={saveRename}
+              disabled={!nameDraft.trim() || updateDevice.isPending}
+              className="shrink-0 text-xs text-sky-400 hover:underline disabled:opacity-50"
+              aria-label="Save name"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={cancelRename}
+              className="shrink-0 text-xs text-slate-400 hover:underline"
+              aria-label="Cancel rename"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startRename}
+            title="Rename this device"
+            className="truncate text-left text-sm font-medium hover:underline"
+          >
+            {name}
+          </button>
+        )}
         <span className="whitespace-nowrap text-xs text-slate-400">{STATUS_LABEL[preview.status]}</span>
       </div>
 

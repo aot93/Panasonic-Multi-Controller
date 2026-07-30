@@ -259,13 +259,20 @@ one-at-a-time click tedious in practice.
 **Milestone 3 — polish / deferred**
 - A bundled template/reference slide generator or downloadable sample
   image(s), per the "we will provide sample images" plan.
-- **Inline name editing in the Preview tab** — added to this list from
-  real-hardware testing feedback: while verifying a device's name, let the
-  user correct its configured name right there (`DevicePreviewTile.tsx`),
-  rather than having to navigate to the Devices tab. Directly addresses
-  limitation #1 (§10) — the check can only confirm display-matches-config,
-  so the fastest fix for a caught mismatch is often "the config was wrong,
-  fix it here."
+- ~~Inline name editing in the Preview tab~~ **Implemented.** Added to
+  this list from real-hardware testing feedback: while verifying a
+  device's name, let the user correct its configured name right there
+  (`DevicePreviewTile.tsx`), rather than having to navigate to the Devices
+  tab. Directly addresses limitation #1 (§10) — the check can only confirm
+  display-matches-config, so the fastest fix for a caught mismatch is
+  often "the config was wrong, fix it here." Click the name to edit,
+  Enter/Save to commit (reuses `useUpdateDevice`, same PATCH the Devices
+  tab's own rename uses), Escape/Cancel to back out. Saving clears the
+  tile's own inline verification result (it was checked against the old
+  name) — the persisted badge on the Devices tab is left as-is rather than
+  auto-cleared, a known small inconsistency (a stale checked-against-the-
+  old-name result sitting next to the new name) not worth solving until it
+  proves confusing in practice.
 - Scheduled/automatic re-verification. **Deferred deliberately** — like
   every other addition to the automatic poll cycle in this project, turning
   this into something that runs unattended against real hardware needs the
