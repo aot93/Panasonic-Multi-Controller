@@ -175,3 +175,12 @@ Inputs not tied to a slot should remain single items and restricted to only HDMI
 12. Add ip address of the server to the top of the page under the connected / not connected light
 
 13. Add a pause / resume polling button, sending of commands are still allowed
+
+
+* Phase 4
+
+Quality of life improvments
+
+1. When adding projectors using add range, add an automaticly increasing number to each name, exapmle 'projector 1' , 'projector 2', ...
+
+2. Use natural sort order for the cards so they are arranged strictly numerically with out zero padding, example 1,2,... not 1,11,...
