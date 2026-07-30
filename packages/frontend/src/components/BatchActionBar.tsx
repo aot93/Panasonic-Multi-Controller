@@ -45,6 +45,14 @@ export function BatchActionBar({ selectedIds, onClear }: BatchActionBarProps) {
   const target: CommandTarget = { kind: 'device', ids: [...selectedIds] };
 
   async function sendCommand(command: CommandDef, paramValue: string | null) {
+    // Powering off is the one quick-button action with a real consequence
+    // (unlike e.g. a test pattern) — guard it here rather than per entry
+    // point, since both the favourites button and the generic Send button
+    // funnel through this same function.
+    if (command.key === 'power.off') {
+      const count = selectedIds.size;
+      if (!window.confirm(`Turn off ${count} device${count === 1 ? '' : 's'}?`)) return;
+    }
     setFeedback(null);
     setQueryResult(null);
     try {
@@ -94,8 +102,11 @@ export function BatchActionBar({ selectedIds, onClear }: BatchActionBarProps) {
 
   async function handleRemoveFromGroup() {
     if (!groupId) return;
-    setFeedback(null);
     const gid = Number(groupId);
+    const groupName = groups.find((g) => g.id === gid)?.name ?? 'this group';
+    const count = selectedIds.size;
+    if (!window.confirm(`Remove ${count} device${count === 1 ? '' : 's'} from "${groupName}"?`)) return;
+    setFeedback(null);
     try {
       await Promise.all(
         [...selectedIds].map((deviceId) => {
