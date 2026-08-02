@@ -1,7 +1,15 @@
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { marked } from 'marked';
+import { DoomEasterEgg } from './DoomEasterEgg';
 import { useServerInfo } from '../hooks/useServerInfo';
 import { queryKeys } from '../lib/queryKeys';
+
+// Click the version number 5 times within 3 seconds to launch a playable
+// (shareware) DOOM — a hidden easter egg, so no visual hint is added to the
+// version text itself. See DoomEasterEgg.tsx for the player.
+const EASTER_EGG_CLICKS = 5;
+const EASTER_EGG_WINDOW_MS = 3000;
 
 const REPO_URL = 'https://github.com/aot93/Panasonic-Multi-Controller';
 
@@ -23,6 +31,20 @@ async function fetchText(path: string): Promise<string> {
  */
 export function AboutPage() {
   const { data: serverInfo } = useServerInfo();
+  const [doomOpen, setDoomOpen] = useState(false);
+  const clickTimestamps = useRef<number[]>([]);
+
+  function handleVersionClick() {
+    const now = Date.now();
+    const recent = clickTimestamps.current.filter((t) => now - t < EASTER_EGG_WINDOW_MS);
+    recent.push(now);
+    clickTimestamps.current = recent;
+    if (recent.length >= EASTER_EGG_CLICKS) {
+      clickTimestamps.current = [];
+      setDoomOpen(true);
+    }
+  }
+
   const { data: guideMarkdown, isPending: guidePending, isError: guideError } = useQuery({
     queryKey: queryKeys.userGuide,
     queryFn: () => fetchText('/UserGuide.md'),
@@ -38,7 +60,7 @@ export function AboutPage() {
     <div className="flex flex-col gap-4">
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
         <h2 className="text-sm font-medium uppercase tracking-wider text-slate-400">Projector Control</h2>
-        <p className="mt-1 text-sm text-slate-300">
+        <p className="-m-2 mt-1 inline-block p-2 text-sm text-slate-300" onClick={handleVersionClick}>
           Version {serverInfo ? serverInfo.version : '…'}
         </p>
         <p className="mt-1 text-sm text-slate-400">© 2026 aot93. Licensed under the MIT License (below).</p>
@@ -74,6 +96,8 @@ export function AboutPage() {
           </pre>
         )}
       </section>
+
+      {doomOpen && <DoomEasterEgg onClose={() => setDoomOpen(false)} />}
     </div>
   );
 }

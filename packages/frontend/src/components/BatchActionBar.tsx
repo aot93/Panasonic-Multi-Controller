@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { CommandDef, CommandResult, CommandTarget } from '@ppc/shared';
+import { formatQueryResponse, type CommandDef, type CommandResult, type CommandTarget } from '@ppc/shared';
 import { CommandParamInput } from './CommandParamInput';
 import { CommandPicker } from './CommandPicker';
 import { useCommands } from '../hooks/useCommands';
@@ -29,7 +29,9 @@ export function BatchActionBar({ selectedIds, onClear }: BatchActionBarProps) {
   const [macroId, setMacroId] = useState('');
   const [groupId, setGroupId] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [queryResult, setQueryResult] = useState<{ label: string; results: CommandResult[] } | null>(null);
+  const [queryResult, setQueryResult] = useState<{ label: string; commandKey: string; results: CommandResult[] } | null>(
+    null,
+  );
 
   // One-click quick buttons only make sense for commands that need no param —
   // a favourite like "Select Input" (enum) still needs the picker below, so
@@ -60,7 +62,7 @@ export function BatchActionBar({ selectedIds, onClear }: BatchActionBarProps) {
       if (command.isQuery) {
         // A query's whole point is the returned value per device — a bare
         // success count throws that away (NextSteps.md phase 1 item 10).
-        setQueryResult({ label: command.label, results });
+        setQueryResult({ label: command.label, commandKey: command.key, results });
       } else {
         const okCount = results.filter((r) => r.ok).length;
         setFeedback(`${command.label}: ${okCount}/${results.length} succeeded`);
@@ -149,8 +151,15 @@ export function BatchActionBar({ selectedIds, onClear }: BatchActionBarProps) {
             {queryResult.results.map((r) => (
               <li key={r.deviceId} className="flex justify-between gap-4 border-b border-slate-800/60 py-1 last:border-0">
                 <span className="text-slate-300">{r.deviceName}</span>
-                <span className={r.ok ? 'font-mono text-slate-100' : 'text-status-error'}>
-                  {r.ok ? (r.response ?? '—') : (r.error ?? r.errorCode ?? 'failed')}
+                <span
+                  className={r.ok ? 'text-slate-100' : 'text-status-error'}
+                  title={r.ok && r.response !== null ? `Raw: ${r.response}` : undefined}
+                >
+                  {r.ok
+                    ? r.response !== null
+                      ? formatQueryResponse(queryResult.commandKey, r.response)
+                      : '—'
+                    : (r.error ?? r.errorCode ?? 'failed')}
                 </span>
               </li>
             ))}

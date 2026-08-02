@@ -57,6 +57,20 @@ export function PreviewGrid() {
   const expandedDevice = enabledDevices.find((d) => d.id === expandedId) ?? null;
 
   /**
+   * Post-v1 feedback: "Pre-show" all on/off buttons. Sets every visible
+   * tile's Pre-Show mode to the same explicit state rather than toggling
+   * (a toggle would leave tiles in whatever state they each already had) —
+   * a no-op for any tile with no open connection (DevicePreviewTileHandle.
+   * setPreshow guards on that itself, same as the per-tile button only
+   * appearing once connected).
+   */
+  function setPreshowAll(active: boolean) {
+    for (const device of visibleDevices) {
+      tileHandles.current.get(device.id)?.setPreshow(active);
+    }
+  }
+
+  /**
    * "Verify all" (docs/vision-name-verification-plan.md §9/§11) — sequential,
    * not parallel, and never opens a second connection to a device whose
    * tile already has one open (see DevicePreviewTileHandle.isConnected and
@@ -118,6 +132,24 @@ export function PreviewGrid() {
             className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-50"
           >
             Stop all
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreshowAll(true)}
+            disabled={visibleDevices.every((d) => !enabledIds.has(d.id))}
+            title="Turns Pre-Show mode on for every connected preview"
+            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-50"
+          >
+            Pre-Show: All on
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreshowAll(false)}
+            disabled={visibleDevices.every((d) => !enabledIds.has(d.id))}
+            title="Turns Pre-Show mode off for every connected preview"
+            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-50"
+          >
+            Pre-Show: All off
           </button>
           <button
             type="button"

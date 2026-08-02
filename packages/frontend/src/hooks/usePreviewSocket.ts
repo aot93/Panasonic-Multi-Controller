@@ -13,6 +13,8 @@ export interface PreviewState {
 
 export interface PreviewControls extends PreviewState {
   togglePreshow: () => void;
+  /** Sets Pre-Show mode to a specific state rather than flipping it — used by "Pre-Show: All on/off" (PreviewGrid) so every tile ends up in the same state regardless of where each started. */
+  setPreshow: (active: boolean) => void;
   reconnect: () => void;
   /** The most recently received frame, for anything that needs actual pixel data (e.g. OCR) rather than just an `<img src>` — see docs/vision-name-verification-plan.md. Null whenever there's no current image (not yet connected, blanked, HDCP). */
   captureFrame: () => Blob | null;
@@ -170,13 +172,16 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host, enabled, nonce]);
 
-  function togglePreshow(): void {
+  function setPreshow(active: boolean): void {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    const next = !preshowActive;
-    socket.send(next ? 'preshow:1' : 'preshow:0');
-    setPreshowActive(next);
+    socket.send(active ? 'preshow:1' : 'preshow:0');
+    setPreshowActive(active);
     setPreshowBusy(false);
+  }
+
+  function togglePreshow(): void {
+    setPreshow(!preshowActive);
   }
 
   function reconnect(): void {
@@ -187,5 +192,5 @@ export function usePreviewSocket(host: string, enabled: boolean): PreviewControl
     return latestBlobRef.current;
   }
 
-  return { status, imageUrl, hdcp, preshowActive, preshowBusy, error, togglePreshow, reconnect, captureFrame };
+  return { status, imageUrl, hdcp, preshowActive, preshowBusy, error, togglePreshow, setPreshow, reconnect, captureFrame };
 }

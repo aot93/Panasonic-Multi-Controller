@@ -190,3 +190,13 @@ Items 1 and 2 are now completed. Testing item 1 surfaced that device names
 had no duplicate guard at all (re-running "Add range" with the same prefix
 silently created two identically-named devices) — fixed: create and
 rename now reject a name already in use by another device.
+
+* Post v1 improvments
+
+From user feedback the following should be added
+
+1. Preview window - add "Pre-show" all on / off buttons
+2. Print human readable reponses from all built in query commands rather than just the raw response from the projector - Example query shutter fade in setting with QVX:SEFS1 returns SEFS1=3.0 present this to the user as "Shuter fade in value 3 seconds" 
+
+Both items are now completed — see the "Post v1 improvements" section in
+docs/PROGRESS.md.

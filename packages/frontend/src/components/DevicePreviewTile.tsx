@@ -29,6 +29,8 @@ export interface DevicePreviewTileHandle {
   canVerify: () => boolean;
   /** Runs this tile's own "Verify Name" flow over its already-open connection. */
   verifyName: () => Promise<void>;
+  /** Sets this tile's Pre-Show mode to a specific state, if it has an open connection — used by PreviewGrid's "Pre-Show: All on/off". */
+  setPreshow: (active: boolean) => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -76,6 +78,7 @@ export const DevicePreviewTile = forwardRef<DevicePreviewTileHandle, DevicePrevi
     isConnected: () => preview.status === 'connected',
     canVerify: () => canVerifyName,
     verifyName: verifyNow,
+    setPreshow: preview.setPreshow,
   }));
 
   // Milestone 3 (docs/vision-name-verification-plan.md §11): edit the name
