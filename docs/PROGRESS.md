@@ -9,7 +9,12 @@ in the Preview tab, and human-readable text for every built-in query
 command's result (e.g. `SEFS1=3.0` now reads "3.0 seconds" instead of the
 raw wire token). See "Post v1 improvements" near the end of this file.
 **The exe has been rebuilt with this change and the packaged binary itself
-was launched and verified serving the new code.**
+was launched and verified serving the new code.** `APP_VERSION`
+(`packages/backend/src/config.ts`) bumped `1.0` → `1.1` per its own
+documented convention ("bump by 0.1 per release") ahead of the PR to `main`
+— shown in the About page and `/api/health`, deliberately independent of
+`package.json`'s own `0.1.0` (left untouched, per that same comment).
+`README.md`'s "Status: v1.0 released" line updated to match.
 
 **Previously, same day:** Added a hidden DOOM easter egg to the About
 page (click the version number 5× fast) — playable shareware DOOM running
