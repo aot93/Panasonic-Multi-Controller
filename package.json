@@ -21,9 +21,11 @@
     "typecheck": "tsc -b && tsc --noEmit -p packages/frontend/tsconfig.json",
     "clean": "node -e \"for (const p of ['shared','backend','frontend']) require('fs').rmSync('packages/'+p+'/dist',{recursive:true,force:true})\"",
     "package:win": "node scripts/package.mjs win",
-    "setup:ocr-assets": "node scripts/setup-ocr-assets.mjs"
+    "setup:ocr-assets": "node scripts/setup-ocr-assets.mjs",
+    "setup:doom-assets": "node scripts/setup-doom-assets.mjs"
   },
   "devDependencies": {
+    "adm-zip": "^0.6.0",
     "esbuild": "^0.21.5",
     "postject": "^1.0.0-alpha.6",
     "typescript": "^5.6.3"

@@ -3,7 +3,26 @@
 A checkpoint for resuming this build. Read this first if picking the project
 back up cold; it links out to the deeper docs rather than repeating them.
 
-**Last updated:** 2026-07-30. Real-hardware testing succeeded (commands
+**Last updated:** 2026-08-02. Worked through `docs/NextSteps.md`'s "Post v1
+improvements" (2 items from user feedback): "Pre-Show: All on/off" buttons
+in the Preview tab, and human-readable text for every built-in query
+command's result (e.g. `SEFS1=3.0` now reads "3.0 seconds" instead of the
+raw wire token). See "Post v1 improvements" near the end of this file.
+**The exe has been rebuilt with this change and the packaged binary itself
+was launched and verified serving the new code.** `APP_VERSION`
+(`packages/backend/src/config.ts`) bumped `1.0` → `1.1` per its own
+documented convention ("bump by 0.1 per release") ahead of the PR to `main`
+— shown in the About page and `/api/health`, deliberately independent of
+`package.json`'s own `0.1.0` (left untouched, per that same comment).
+`README.md`'s "Status: v1.0 released" line updated to match.
+
+**Previously, same day:** Added a hidden DOOM easter egg to the About
+page (click the version number 5× fast) — playable shareware DOOM running
+via a vendored WASM DOSBox (js-dos), fully offline like the rest of the app.
+See "DOOM easter egg" near the end of this file. The exe was rebuilt with
+that change.
+
+**Previously, 2026-07-30:** Real-hardware testing succeeded (commands
 received, callbacks working against 192.168.0.101–122); `docs/NextSteps.md`
 Phase 1 (10 feature items) was implemented in full, then a real-hardware bug
 report (AC voltage NaN + wrong scale) was fixed the same session. Phase 2
@@ -52,6 +71,8 @@ each.
 | — Preview group filter, remove-from-group, delete device, rename device | ✅ Done |
 | — Real self-diagnosis codes replace temp thresholds | ✅ Done |
 | — `NextSteps.md` Phase 3 (built-in commands + usability, 13 items) | ✅ Done — exe rebuilt |
+| — DOOM easter egg (About page) | ✅ Done — exe rebuilt |
+| — `NextSteps.md` "Post v1 improvements" (2 items) | ✅ Done — exe rebuilt |
 
 ## Repo layout
 
@@ -61,6 +82,9 @@ packages/
              src/types.ts     — Device, Group, Command, Macro, MacroRunResult, Schedule, etc.
              src/protocol.ts  — NTCONTROL constants, command bodies, enums
              src/self-diagnosis.ts — QVX:ERRS1/ERRS2 code table + lookupSelfDiagnosisCode() (hardware-confirmed, not from either official PDF)
+             src/query-format.ts — formatQueryResponse(): raw query response -> plain-English text
+                                    (Post v1 improvements item 2), reusing protocol.ts's option
+                                    tables + self-diagnosis.ts's lookup
   backend/   Express + Socket.io server, SQLite via node:sqlite
              src/config.ts             — env vars, paths
              src/db/                   — schema, migrations, seed, crypto, cli-add-device (dev helper)
@@ -97,7 +121,9 @@ packages/
                                      GroupsManager, EventLogViewer, CommandCatalogueManager,
                                      ProjectFileManager, PreviewGrid, DevicePreviewTile (Phase 2 —
                                      talks directly to each projector's own preview WebSocket, no
-                                     backend involvement at all)
+                                     backend involvement at all), AboutPage (version/license/user
+                                     guide + the hidden DOOM easter-egg trigger), DoomEasterEgg
+                                     (the js-dos/DOSBox player modal — see "DOOM easter egg" below)
              src/App.tsx           — tab shell (Devices / Macros / Preview / Logs / Settings), selection
                                      state, modals, server IP + pause/resume-polling in the header
 docs/
@@ -114,6 +140,10 @@ panasonic_*.py                          — original working Python scripts (rep
                                            useful reference for real-world credentials/behavior
 scripts/
   package.mjs                           — Windows SEA packaging (phase 7): npm run package:win
+  setup-ocr-assets.mjs                  — vendors Tesseract.js WASM/language data (name
+                                           verification): npm run setup:ocr-assets
+  setup-doom-assets.mjs                 — vendors js-dos + shareware DOOM.EXE/DOOM1.WAD (About-page
+                                           easter egg, checksum-verified): npm run setup:doom-assets
 release/win/                            — packaging output (gitignored): ProjectorControl.exe,
                                            public/, migrations/, README.txt
 ```
@@ -565,9 +595,10 @@ npm run dev --workspace @ppc/frontend       # http://localhost:5173
 ```
 
 `release/win/ProjectorControl.exe` is already rebuilt with everything through
-the post-packaging feedback round (credentials UI, bulk-add, select-all,
-groups) — no rebuild needed to pick this up. If you do change any source
-after this point, rebuild with:
+the "Post v1 improvements" round (Pre-Show all on/off + human-readable query
+results — see that section, at the very end of this file) — no rebuild
+needed to pick this up. If you do change any source after this point,
+rebuild with:
 
 ```sh
 npm run package:win
@@ -1075,3 +1106,194 @@ spec, still cited from `README.md`) was deliberately left in place — only
 the kickoff prompt sitting alongside it moved. Historical entries earlier
 in this file that say "repo root" describe the layout as it was at the
 time and are left as-is; only forward-looking references were fixed.
+
+## DOOM easter egg
+
+Purely for fun, at the user's request, after the v1.0 public beta docs pass.
+Click "Version 0.1.0" on the About page 5× within 3 seconds → a full-screen
+modal boots real, playable shareware DOOM (1993, id Software) inside the
+app, no internet required at runtime. No visual hint added anywhere — stays
+a genuine easter egg.
+
+**How it runs DOOM:** [js-dos](https://js-dos.com) v8 (a WASM build of
+DOSBox) as the emulator, `DoomEasterEgg.tsx` mounts it into a `<div>` and
+boots the real 1995 `DOOM.EXE` against `DOOM1.WAD`. js-dos v8's `Dos(el,
+options)` has no example in its own docs for running raw files (only
+`.jsdos` zip bundles or a file-picker UI) — the actual mechanism was found
+by reading the minified `js-dos.js`/`emulators.js` source directly: passing
+`dosboxConf` (a raw dosbox.conf string) together with `initFs` (an array of
+`{path, contents: Uint8Array}` entries) skips bundle-building entirely and
+boots straight from in-memory files. `DoomEasterEgg.tsx`'s `DOOM_DOSBOX_CONF`
+is js-dos's own default config (extracted the same way, comments stripped)
+with a custom `[autoexec]` (`mount c .` / `SET BLASTER=...` / `DOOM.EXE`).
+`window.Dos(...)` returns a handle with `stop()` (calls the DOSBox command
+interface's `exit()`) — called on modal close/unmount so nothing keeps
+running in the background.
+
+**Getting the real shareware files, verified, not just "found a WAD
+online":** id Software's own 1995 shareware README (bundled with the
+files) explicitly permits redistributing the complete, unmodified episode.
+`scripts/setup-doom-assets.mjs` fetches the archive.org-preserved copy of
+the original `doom_dos.zip` and checks both extracted files' **SHA-256**
+against the values doomwiki.org publishes for the final v1.9 release
+(1995-02-01) before writing anything to disk — refuses to proceed on a
+mismatch. Confirmed matching on the first real run. js-dos itself (the
+DOSBox/WASM player) is vendored the same way, copied straight out of
+`node_modules/js-dos/dist` — no separate fetch needed since `npm install`
+already resolves it.
+
+**Same "fully offline" rule as the OCR assets, same vendoring pattern:**
+js-dos defaults to fetching its WASM backends from `js-dos.com`'s CDN
+(`pathPrefix` option) — overridden to the locally vendored copy, matching
+this app's existing no-internet-at-runtime design (see the vision-name-
+verification OCR work). `scripts/setup-doom-assets.mjs` mirrors
+`setup-ocr-assets.mjs` exactly: not wired into `postinstall` (one-time
+network fetch shouldn't happen silently on every install), idempotent
+(skips anything already present), output gitignored
+(`packages/frontend/public/doom-engine/`, ~25MB, regenerated via
+`npm run setup:doom-assets`).
+
+**License note, deliberately handled by keeping it vendored-and-separate
+rather than imported:** js-dos itself is GPL-2.0-licensed (this app is
+MIT). It's used only as a vendored static asset loaded via a `<script>` tag
+at runtime (js-dos's own npm package has no importable entry point anyway
+— it's shipped as a UMD bundle meant to be dropped in as a file, same as
+how the js-dos project's own examples use it), never imported into or
+linked with this app's own TypeScript/JS — kept as a frontend
+`devDependency` (source for the vendoring script only, not a runtime
+import) rather than a `dependency` for that reason.
+
+**Trigger UX, refined after trying it:** first pass put the `onClick` on
+just the version-number `<span>` — the user reported the clickable area
+"seemed focused on just the last digit". Fixed by moving the handler to
+the whole `<p>Version 0.1.0</p>` line and adding invisible padding
+(`-m-2 p-2` on an `inline-block`, a Tailwind trick that expands the
+clickable hit box without shifting surrounding layout or adding any visible
+background/border) so the whole line is a forgiving click target.
+
+**Verified — end to end, including the actual packaged exe, not just
+dev mode:** `npm run typecheck` clean; both dev servers (`vite` on 5173,
+backend on 8080) served every `/doom-engine/*` asset correctly; then
+`npm run package:win` rebuilt the exe (94MB, up from ~70MB — the vendored
+WASM DOSBox backends + WAD add ~25MB) and the **packaged**
+`ProjectorControl.exe` was actually launched (not just built) and confirmed
+serving `/doom-engine/js-dos.js`, both DOSBox WASM backends, `DOOM.EXE`, and
+`DOOM1.WAD` all at 200 with correct byte sizes — proving the existing
+`public/` → frontend `dist/` → backend `dist/public` → `release/win/public`
+asset pipeline picked up the new vendored folder with **zero packaging-
+script changes needed**. **Not verified: actual on-screen gameplay/audio in
+a real browser** — no headless browser tool is available in this
+environment, the same standing limitation noted throughout this file for
+the rest of the frontend. The user still needs to confirm it actually plays
+by clicking through it themselves.
+
+## Post v1 improvements
+
+`docs/NextSteps.md` grew a "Post v1 improvments" section, two items "from
+user feedback". Both done in one round, same day as the DOOM easter egg.
+
+### Item 1: "Pre-Show: All on/off" buttons in the Preview tab
+
+Each preview tile already had its own per-tile Pre-Show toggle (`docs/
+NextSteps.md` Phase 2), the same way `PreviewGrid` already had "Start
+all"/"Stop all" for connections themselves — this closes the same gap for
+Pre-Show specifically.
+
+`usePreviewSocket.ts` gained `setPreshow(active: boolean)` — sets Pre-Show
+to an explicit state over the WebSocket rather than flipping whatever state
+it's currently in, distinct from the existing `togglePreshow` (now
+implemented in terms of it: `togglePreshow = () => setPreshow(!preshowActive)`).
+An explicit setter matters here specifically because a mixed fleet — some
+tiles already on, some off — needs "all on" to mean *all* on, not "flip
+whichever happen to be off". `DevicePreviewTileHandle` (the existing
+imperative-handle pattern `PreviewGrid` already uses for "Verify all") grew
+a matching `setPreshow`, and `PreviewGrid` grew two buttons next to "Start
+all"/"Stop all" that iterate `visibleDevices` and call each tile's handle.
+No new architecture — reuses the exact `tileHandles` ref map "Verify all"
+already established.
+
+**Deliberately a no-op for a tile with no open connection** — `setPreshow`
+guards on the WebSocket being open (same guard the original `togglePreshow`
+already had), so clicking "All on" while some visible tiles aren't connected
+silently skips those rather than erroring or auto-connecting them first —
+consistent with "nothing here auto-connects" being this whole tab's
+existing rule (see the Phase 2 write-up above). The buttons' own
+enabled/disabled state is a light heuristic (enabled whenever any visible
+device is enabled — same condition "Stop all" already uses), not a precise
+"is anything actually connected" check, since tracking that reactively
+would need lifting each tile's connection status out of its own hook — not
+worth it for a button that's already a safe no-op when nothing's connected.
+
+### Item 2: human-readable query results
+
+Before this, `BatchActionBar`'s query-result panel (`docs/NextSteps.md`
+Phase 1 item 10) showed the raw wire token verbatim — e.g. querying shutter
+fade-in returned literally `SEFS1=3.0`. The user's own example asked for
+"Shutter fade in value 3 seconds" instead.
+
+**New `packages/shared/src/query-format.ts`**: `formatQueryResponse(commandKey,
+response)`, a pure function mapping a built-in query command's key to
+plain-English text. Reuses the option tables already in `protocol.ts`
+(`ASPECT_OPTIONS`, `INPUT_OPTIONS`, `SHUTTER_FADE_OPTIONS`, etc. — the same
+ones the command pickers already use for their dropdown labels) rather than
+duplicating them, and `self-diagnosis.ts`'s `lookupSelfDiagnosisCode()` for
+`QVX:ERRS2` so a query result reads the same finding description already
+used elsewhere (`DeviceCard`'s self-diagnosis line, event messages). Put in
+`shared`, not `frontend`, since it operates purely on `CommandDef.key` +
+`CommandResult.response` strings — no DOM/React dependency — and mirrors
+exactly the kind of response-interpretation `packages/backend/src/protocol/
+parsers.ts` already does for telemetry (that file stays backend-only,
+un-touched; this is a separate, display-oriented reimplementation of the
+same wire-format knowledge, not a shared import across the backend/frontend
+boundary that doesn't otherwise exist).
+
+Covers all 26 built-in query commands with a known response shape (power,
+shutter, input, test pattern, aspect, screen, picture mode, both
+temperatures, lamp hours, lamp status, runtime, MAC address, both
+self-diagnosis fields, AC voltage, startup logo, back color, both shutter
+fade directions, on-screen display, quad pixel drive, projection method,
+installation attitude, OSD position, daylight view) — e.g. `SEFS1=3.0` →
+`"3.0 seconds"`, `VMOI2=+00238` → `"238 V"`, `QIN`'s `AU2,HD3` → `"Slot 2 —
+HDMI 3"`, `ERRS2=H001` → `"H001: Battery replacement for the internal
+clock"`. **Falls back to the raw response unchanged for anything it doesn't
+recognise** — a custom/catalogue-added query command, or an unexpected
+response shape — so this only ever adds a friendlier rendering on top of
+known built-ins, never hides or guesses at a value. `id.model.query`/
+`id.serial.query` fall through to this default deliberately: their raw
+responses are already plain text (a model name, a serial number), nothing
+to translate.
+
+`BatchActionBar.tsx`'s query-result list now renders `formatQueryResponse(
+queryResult.commandKey, r.response)` instead of `r.response` directly (the
+state object gained a `commandKey` field alongside the existing `label` to
+make this possible); the original raw token is still available on hover via
+a `title` attribute, so nothing is actually lost, just de-emphasised — a
+technician who wants to eyeball the literal wire value still can.
+
+**Verified:** `npm run typecheck` (full monorepo, clean), `npm run build
+--workspace @ppc/shared` + `@ppc/frontend` (both clean), a smoke test
+running `formatQueryResponse` directly against real example payloads for
+every branch (shutter fade at both 0.0 and 3.0, power on/off, aspect,
+input's slot/type/number form, both temperature fields, runtime, voltage,
+both self-diagnosis fields, a MAC address, and an unrecognised custom
+command key) — all matched the expected human-readable text, including the
+user's own `SEFS1=3.0` → `"3.0 seconds"` example. 256 backend tests still
+passing (untouched by this round — no backend files changed).
+
+**Then rebuilt and verified against the actual packaged exe**, not just the
+source build: stopped the dev backend that happened to be running on port
+8080 first (avoids a Windows file-lock during packaging, same precaution as
+prior rounds), ran `npm run package:win` (94MB, unchanged from the DOOM
+round — no new vendored assets this time), then **launched the packaged
+`ProjectorControl.exe` itself** and confirmed via curl against the running
+binary: `/api/health` responds correctly, the served JS bundle
+(`/assets/index-*.js`) contains the literal strings `"Pre-Show: All on"`,
+`"No active self-diagnosis codes"`, and `"All normal"` — proving both
+features' code is actually present in what the exe serves, not just in the
+source tree — and a couple of unrelated existing static assets
+(`/UserGuide.md`, `/doom-engine/js-dos.js`) still serve correctly alongside
+it. **Not verified: on-screen appearance/interaction in an actual browser**
+— same standing limitation as the rest of this file (no headless browser
+tool in this environment); confirmed the correct code is served and that
+the formatting logic itself produces correct output, not that clicking the
+buttons or reading the panel looks right on screen.
