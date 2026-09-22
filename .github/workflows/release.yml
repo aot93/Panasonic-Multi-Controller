@@ -50,6 +50,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Vendor DOOM easter egg assets
+        run: npm run setup:doom-assets
+
       - run: npm run package:${{ matrix.platform }}
 
       - name: Zip release folder (Windows)
