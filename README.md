@@ -18,11 +18,6 @@ block the first launch — right-click it and choose Open once to clear that.
 See `docs/UserGuide.md` (also rendered in-app, About tab) for setup and
 usage.
 
-This repo is currently **private**, in public beta with invited testers —
-the link above only works if you're logged into GitHub as a collaborator
-with access. It'll become a fully public, no-login download once the beta
-period ends.
-
 **Status: v1.1 released.** All of `docs/NextSteps.md` Phases 1-4 are done
 (live preview, built-in command/usability additions, auto-numbered
 bulk-add + natural sort + duplicate-name guard), vision-based projector
