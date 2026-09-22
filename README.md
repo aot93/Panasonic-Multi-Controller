@@ -28,7 +28,7 @@ guide rendered in-app) and a plain-English `docs/UserGuide.md`. 256 backend
 tests passing (`npm test --workspace @ppc/backend`). See `docs/PROGRESS.md`
 for the full phase-by-phase history.
 
-### Latest: vision-based projector name verification, About page, v1.0
+### Latest: vision-based projector name verification, About page, v1.1
 
 Using the live-preview WebSocket (Phase 2, below), the browser runs OCR
 (self-hosted Tesseract.js, fully offline) against a projector's current
@@ -184,7 +184,7 @@ that fleet** — anything that would dispatch or newly poll a command against
 it needs to be confirmed first, not assumed safe. See `docs/PROGRESS.md`'s
 real-hardware section for what was checked. `release/win/ProjectorControl.exe`
 is rebuilt and re-validated against the real fleet as each round of changes
-lands (currently v1.0 — see the top of this file and `docs/PROGRESS.md`),
+lands (currently v1.1 — see the top of this file and `docs/PROGRESS.md`),
 published via [GitHub Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest)
 rather than committed to git — remember `scripts/package.mjs` deletes and
 regenerates the whole `release/win/` folder on every rebuild, including any
