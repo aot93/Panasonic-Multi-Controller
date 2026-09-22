@@ -4,12 +4,19 @@ Web app for monitoring and controlling a fleet of Panasonic projectors over
 the network — see `Claude/Panasonic_Projector_App_Spec_v2.md` for the full
 spec and `docs/protocol-notes.md` for protocol implementation notes.
 
-## Download (Windows)
+## Download (Windows / macOS)
 
 **[⬇ Download ProjectorControl-win.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-win.zip)**
 — extract anywhere and run `ProjectorControl.exe`. No install, no Node.js
-required. See `docs/UserGuide.md` (also rendered in-app, About tab) for
-setup and usage.
+required.
+
+**[⬇ Download ProjectorControl-mac.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-mac.zip)**
+— extract anywhere and run `./ProjectorControl` (or double-click it in
+Finder). The binary is ad-hoc signed, not notarized, so Gatekeeper will
+block the first launch — right-click it and choose Open once to clear that.
+
+See `docs/UserGuide.md` (also rendered in-app, About tab) for setup and
+usage.
 
 This repo is currently **private**, in public beta with invited testers —
 the link above only works if you're logged into GitHub as a collaborator
@@ -21,8 +28,10 @@ period ends.
 bulk-add + natural sort + duplicate-name guard), vision-based projector
 name verification is built and validated against real hardware (self-hosted
 OCR, no internet required — see `docs/vision-name-verification-plan.md`),
-and the app ships as a single packaged Windows exe (`npm run package:win`)
-distributed via [GitHub Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest),
+and the app ships as a single packaged Windows or macOS executable
+(`npm run package:win` / `npm run package:mac`, built for each platform by
+`.github/workflows/release.yml`) distributed via [GitHub
+Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest),
 MIT-licensed, with an in-app About page (version, license, and the user
 guide rendered in-app) and a plain-English `docs/UserGuide.md`. 256 backend
 tests passing (`npm test --workspace @ppc/backend`). See `docs/PROGRESS.md`
@@ -193,31 +202,37 @@ regenerates the whole `release/win/` folder on every rebuild, including any
 ### Packaging
 
 ```sh
-npm run package:win
+npm run package:win   # release/win/ProjectorControl.exe
+npm run package:mac   # release/mac/ProjectorControl
 ```
 
-Builds everything and produces `release/win/ProjectorControl.exe` — a single
-executable containing the Node runtime and the entire app (Express,
-Socket.io, SQLite, all of it), via Node's built-in [Single Executable
+Builds everything and produces a single executable containing the Node
+runtime and the entire app (Express, Socket.io, SQLite, all of it), via
+Node's built-in [Single Executable
 Applications](https://nodejs.org/api/single-executable-applications.html)
 feature (`scripts/package.mjs`). The built frontend and SQL migrations ship
 as plain `public/` and `migrations/` folders next to the exe rather than
 embedded inside it — see the comment at the top of `scripts/package.mjs` for
 why that's a deliberate, documented simplification rather than an oversight.
-Double-click the exe; it creates a `data/` folder beside itself on first run
-(SQLite database + encryption key) and serves the app at
-`http://localhost:8080`.
+Double-click the exe (or run the mac binary directly); it creates a `data/`
+folder beside itself on first run (SQLite database + encryption key) and
+serves the app at `http://localhost:8080`.
 
-**Verified working**: built, launched, and exercised end to end — device
-registration, command dispatch, macro creation/execution, telemetry, and a
-live Socket.io connection all confirmed against the actual packaged exe (not
-just the dev server), including that data survives a restart.
+SEA injection is platform-specific — the script copies whichever node binary
+is currently running it — so each build has to run ON (or FOR) its target
+OS. `.github/workflows/release.yml` handles this by running
+`npm run package:win` / `npm run package:mac` on GitHub's `windows-latest`
+and `macos-latest` runners on every `v*` tag push (or via manual
+`workflow_dispatch`), zipping each `release/<platform>/` folder and
+attaching it to the matching GitHub release. Linux isn't packaged — there's
+no distribution target for it.
 
-**macOS is not implemented.** SEA packaging is platform-specific — you inject
-into *that* OS's own node binary, plus macOS has its own codesigning story —
-so it has to be built (and tested) on/for a Mac, which isn't available here.
-`scripts/package.mjs` refuses to run for anything but `win` rather than
-producing something unverifiable.
+**Verified working (Windows)**: built, launched, and exercised end to end —
+device registration, command dispatch, macro creation/execution, telemetry,
+and a live Socket.io connection all confirmed against the actual packaged
+exe (not just the dev server), including that data survives a restart. The
+macOS build hasn't been run against real hardware yet — the CI job produces
+and uploads it, but exercise it locally before relying on it.
 
 Phase 6 built the real React app in the order the kickoff prompt specifies:
 
@@ -310,7 +325,7 @@ docs/
   vision-name-verification-plan.md  Design + build/validation log for name verification (above)
   UserGuide.md                      Plain-English guide for non-technical users; also rendered in-app
 scripts/
-  package.mjs                  Windows SEA packaging (phase 7) — npm run package:win
+  package.mjs                  Windows/macOS SEA packaging (phase 7) — npm run package:win / package:mac
   setup-ocr-assets.mjs         One-time vendoring of Tesseract.js WASM/language data — npm run setup:ocr-assets
   copy-static-docs.mjs         Mirrors docs/UserGuide.md + LICENSE into packages/frontend/public/
 _old/                           Legacy prototype scripts, staged for review/removal (see docs/PROGRESS.md);
