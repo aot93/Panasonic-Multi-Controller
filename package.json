@@ -22,6 +22,7 @@
     "clean": "node -e \"for (const p of ['shared','backend','frontend']) require('fs').rmSync('packages/'+p+'/dist',{recursive:true,force:true})\"",
     "package:win": "node scripts/package.mjs win",
     "package:mac": "node scripts/package.mjs mac",
+    "package:linux": "node scripts/package.mjs linux",
     "setup:ocr-assets": "node scripts/setup-ocr-assets.mjs",
     "setup:doom-assets": "node scripts/setup-doom-assets.mjs"
   },

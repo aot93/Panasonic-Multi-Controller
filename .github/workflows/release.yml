@@ -1,11 +1,11 @@
 name: Release builds
 
-# Builds the Windows and macOS SEA executables (scripts/package.mjs) on
-# their real target OS — windows-latest / macos-latest — since SEA
-# injection copies whichever node binary is currently running and can't be
-# cross-built from Linux. Zips each release/<platform> folder and attaches
-# it to the matching GitHub release, creating the release if it doesn't
-# exist yet.
+# Builds the Windows, macOS, and Linux SEA executables (scripts/package.mjs)
+# on their real target OS — windows-latest / macos-latest / ubuntu-latest —
+# since SEA injection copies whichever node binary is currently running and
+# can't be cross-built. Zips each release/<platform> folder and attaches it
+# to the matching GitHub release, creating the release if it doesn't exist
+# yet.
 on:
   push:
     tags:
@@ -33,6 +33,10 @@ jobs:
             platform: mac
             release_dir: release/mac
             asset_name: ProjectorControl-mac.zip
+          - os: ubuntu-latest
+            platform: linux
+            release_dir: release/linux
+            asset_name: ProjectorControl-linux.zip
     runs-on: ${{ matrix.os }}
     steps:
       - name: Resolve tag
@@ -60,8 +64,8 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path ${{ matrix.release_dir }}/* -DestinationPath ${{ matrix.asset_name }}
 
-      - name: Zip release folder (macOS)
-        if: matrix.platform == 'mac'
+      - name: Zip release folder (macOS/Linux)
+        if: matrix.platform == 'mac' || matrix.platform == 'linux'
         shell: bash
         run: cd ${{ matrix.release_dir }} && zip -r ../../${{ matrix.asset_name }} .
 

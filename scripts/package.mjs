@@ -27,9 +27,9 @@
  * SEA injection is platform-specific — this script copies whichever node
  * binary is *currently running* it, so it must itself run ON (or FOR) the
  * target OS: `npm run package:win` on Windows, `npm run package:mac` on
- * macOS. Linux isn't implemented (no distribution target for it). The
- * release workflow (`.github/workflows/release.yml`) runs this on GitHub's
- * `windows-latest` and `macos-latest` runners so both real platform
+ * macOS, `npm run package:linux` on Linux. The release workflow
+ * (`.github/workflows/release.yml`) runs this on GitHub's `windows-latest`,
+ * `macos-latest`, and `ubuntu-latest` runners so all three real platform
  * binaries get produced and verified, not cross-built.
  */
 import { build as esbuildBuild } from 'esbuild';
@@ -243,14 +243,43 @@ async function packageMac() {
   ]);
 }
 
+async function packageLinux() {
+  const releaseDir = resolve(ROOT, 'release/linux');
+  const blob = await buildSeaBlob(releaseDir);
+
+  console.log('\n== 4/5 Copying the Node runtime ==');
+  const exePath = resolve(releaseDir, APP_NAME);
+  copyFileSync(process.execPath, exePath);
+  chmodSync(exePath, 0o755);
+
+  console.log('\n== 5/5 Injecting the application blob (postject) ==');
+  // No code-signing step here (unlike Windows/macOS) — ELF binaries on
+  // Linux have no signature to strip or re-apply.
+  const seaFuse = readSeaFuse(exePath);
+  console.log(`  using sentinel fuse read from the binary: ${seaFuse}`);
+  await postjectInject(exePath, 'NODE_SEA_BLOB', readFileSync(blob.blobPath), {
+    sentinelFuse: seaFuse,
+    overwrite: true,
+  });
+
+  finishRelease(releaseDir, exePath, blob, [
+    `${APP_NAME}`,
+    '',
+    `To run: open a terminal in this folder and run ./${APP_NAME}.`,
+    ...COMMON_README_LINES,
+  ]);
+}
+
 async function main() {
   const platform = process.argv[2] ?? 'win';
   if (platform === 'win') {
     await packageWindows();
   } else if (platform === 'mac') {
     await packageMac();
+  } else if (platform === 'linux') {
+    await packageLinux();
   } else {
-    console.error(`Unknown platform "${platform}" — expected "win" or "mac".`);
+    console.error(`Unknown platform "${platform}" — expected "win", "mac", or "linux".`);
     process.exit(1);
   }
 }

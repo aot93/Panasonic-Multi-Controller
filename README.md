@@ -4,7 +4,7 @@ Web app for monitoring and controlling a fleet of Panasonic projectors over
 the network — see `Claude/Panasonic_Projector_App_Spec_v2.md` for the full
 spec and `docs/protocol-notes.md` for protocol implementation notes.
 
-## Download (Windows / macOS)
+## Download (Windows / macOS / Linux)
 
 **[⬇ Download ProjectorControl-win.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-win.zip)**
 — extract anywhere and run `ProjectorControl.exe`. No install, no Node.js
@@ -15,17 +15,195 @@ required.
 Finder). The binary is ad-hoc signed, not notarized, so Gatekeeper will
 block the first launch — right-click it and choose Open once to clear that.
 
+**[⬇ Download ProjectorControl-linux.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-linux.zip)**
+— extract anywhere, `chmod +x ProjectorControl` if the executable bit didn't
+survive the unzip, and run `./ProjectorControl`. No install, no Node.js
+required.
+
 See `docs/UserGuide.md` (also rendered in-app, About tab) for setup and
 usage.
 
-**Status: v1.1 released.** All of `docs/NextSteps.md` Phases 1-4 are done
+## Requirements
+
+- Node.js >= 20.11 (LTS). Installed on this machine as v24.18.0 via winget
+  (`OpenJS.NodeJS.LTS`).
+- To package (`npm run package:win`) only: `signtool` (Windows SDK) is
+  optional — used to strip the copied node.exe's code signature before
+  injecting the app blob. Not installed on this machine; the script proceeds
+  without it and the packaged exe still runs correctly (verified), it's just
+  unsigned. Install the Windows SDK if you want that step to actually run.
+
+## Getting started
+
+```sh
+npm install
+npm run build --workspace @ppc/shared
+npm run migrate --workspace @ppc/backend   # creates data/projectors.sqlite
+npm run dev --workspace @ppc/backend       # http://localhost:8080
+npm run dev --workspace @ppc/frontend      # http://localhost:5173 (proxies /api and /socket.io)
+```
+
+Register a device and dispatch a command:
+
+```sh
+curl -X POST http://localhost:8080/api/devices -H 'content-type: application/json' \
+  -d '{"name":"Foyer","host":"192.168.0.131"}'
+
+curl -X POST http://localhost:8080/api/dispatch -H 'content-type: application/json' \
+  -d '{"target":{"kind":"device","ids":[1]},"commandKey":"power.on"}'
+```
+
+## Packaging
+
+```sh
+npm run package:win     # release/win/ProjectorControl.exe
+npm run package:mac     # release/mac/ProjectorControl
+npm run package:linux   # release/linux/ProjectorControl
+```
+
+Builds everything and produces a single executable containing the Node
+runtime and the entire app (Express, Socket.io, SQLite, all of it), via
+Node's built-in [Single Executable
+Applications](https://nodejs.org/api/single-executable-applications.html)
+feature (`scripts/package.mjs`). The built frontend and SQL migrations ship
+as plain `public/` and `migrations/` folders next to the exe rather than
+embedded inside it — see the comment at the top of `scripts/package.mjs` for
+why that's a deliberate, documented simplification rather than an oversight.
+Double-click the Windows exe, or run the mac/Linux binary directly
+(`./ProjectorControl`); it creates a `data/` folder beside itself on first
+run (SQLite database + encryption key) and serves the app at
+`http://localhost:8080`.
+
+SEA injection is platform-specific — the script copies whichever node binary
+is currently running it — so each build has to run ON (or FOR) its target
+OS. `.github/workflows/release.yml` handles this by running
+`npm run package:win` / `npm run package:mac` / `npm run package:linux` on
+GitHub's `windows-latest`, `macos-latest`, and `ubuntu-latest` runners on
+every `v*` tag push (or via manual `workflow_dispatch`), zipping each
+`release/<platform>/` folder and attaching it to the matching GitHub
+release.
+
+**Verified working (Windows)**: built, launched, and exercised end to end —
+device registration, command dispatch, macro creation/execution, telemetry,
+and a live Socket.io connection all confirmed against the actual packaged
+exe (not just the dev server), including that data survives a restart.
+**Linux**: the packaged binary was built and run end to end on this machine
+— server boots, `/api/health` responds, and the DOOM easter egg assets are
+present — but it hasn't been exercised against real projector hardware. The
+macOS build hasn't been run against real hardware yet either — the CI job
+produces and uploads it, but exercise it locally before relying on it.
+
+## API
+
+| Method | Path | Notes |
+|---|---|---|
+| GET/POST | `/api/devices` | List (with live state) / register |
+| POST | `/api/devices/bulk` | `{ namePrefix?, startIp, endIp, port? }` — one device per IP in range (same /24, max 254) |
+| GET/PATCH/DELETE | `/api/devices/:id` | |
+| PUT | `/api/devices/:id/groups` | Replace group membership: `{ groupIds: number[] }` |
+| PUT/DELETE | `/api/devices/:id/credentials` | Per-device override; DELETE falls back to the global default |
+| GET/POST | `/api/groups`, GET/PATCH/DELETE `/api/groups/:id` | |
+| GET/POST | `/api/commands`, GET/PATCH/DELETE `/api/commands/:id` | Built-in rows can't be deleted |
+| POST | `/api/dispatch` | `{ target: {kind: "device"\|"group"\|"all", ids?}, commandId? \| commandKey?, param? }` |
+| GET/POST | `/api/triggers`, GET/PATCH/DELETE `/api/triggers/:id` | External TCP/UDP trigger definitions |
+| GET/PUT | `/api/triggers/settings` | `{ enabled, tcpPort, udpPort }` — PUT restarts the listener immediately |
+| GET/POST | `/api/schedules`, GET/PATCH/DELETE `/api/schedules/:id` | Cron expression validated on write |
+| POST | `/api/schedules/:id/run` | Fires the task immediately, ignoring its cron schedule |
+| GET/POST | `/api/macros`, GET/PATCH/DELETE `/api/macros/:id` | `PATCH` with `steps` replaces the whole sequence |
+| POST | `/api/macros/:id/run` | `{ target? }` — falls back to each step's own target override if omitted |
+| GET | `/api/devices/:id/telemetry` | `?metric=&idx=&since=&limit=` — history for the analytics pane; metrics now include `ac_voltage` |
+| GET/PUT/DELETE | `/api/settings/credentials` | Global default `{ username, password }`; GET/PUT never return the password |
+| POST/GET | `/api/devices/:id/verify-name` | Vision-based name check (Preview tab) — POST `{ detectedText, confidence? }`, backend runs the match and persists it |
+| GET/PUT | `/api/settings/name-verification` | `{ similarityThreshold: number }` — tunes the fuzzy-match threshold used above |
+| GET | `/api/events` | `?deviceId=&severity=&since=&limit=` — the error/event log (Logs tab) |
+| GET | `/api/project/export` | Downloads the current config as a portable JSON file (no credentials) |
+| POST | `/api/project/import` | Applies a project file additively — existing rows are never overwritten |
+| POST/PATCH/DELETE | `/api/commands` | Already existed (phase 4) — now has frontend UI (`CommandCatalogueManager`) |
+| GET | `/api/health` | Now also returns `port` and `lanAddresses` — shown in the header (phase 3 item 12) |
+| GET/PUT | `/api/poller/status` | `{ paused: boolean }` — pause/resume the automatic poll cycle (phase 3 item 13); dispatch is unaffected either way |
+
+```sh
+npm test --workspace @ppc/backend   # protocol, poller, and all API tests
+```
+
+## Configuration
+
+Environment variables (all optional, see `packages/backend/src/config.ts`):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PPC_PORT` | `8080` | HTTP/Socket.io port |
+| `PPC_HOST` | `0.0.0.0` | Bind address — 0.0.0.0 so phones on the LAN can reach it |
+| `PPC_DATA_DIR` | `./data` | Where the SQLite file and encryption key live |
+| `PPC_DB_PATH` | `<data dir>/projectors.sqlite` | Override the database file location directly |
+| `PPC_SECRET_KEY` | *(generated)* | 32-byte hex key for encrypting stored projector passwords; auto-generated into `<data dir>/secret.key` if unset |
+
+## Layout
+
+```
+packages/
+  shared/    Types and protocol constants shared by backend and frontend
+  backend/   Express + Socket.io server, SQLite (node:sqlite)
+    src/protocol/      NTCONTROL TCP client + mock projector server (phase 2)
+    src/credentials/   Per-device / global credential resolution (phase 2)
+    src/poller/        Background polling, health/telemetry, alerting (phase 3)
+    src/devices/       Device read-model (phase 3) + CRUD routes (phase 4)
+    src/groups/        Group CRUD routes (phase 4)
+    src/commands/      Command catalogue CRUD routes (phase 4)
+    src/dispatch/      Command dispatch engine + POST /api/dispatch (phase 4)
+    src/triggers/      External TCP/UDP trigger listener + CRUD (phase 4)
+    src/scheduler/     node-cron task runner + /api/schedules CRUD (phase 5)
+    src/macros/        Macro execution engine + /api/macros CRUD
+    src/settings/      Global credentials CRUD (/api/settings/credentials) +
+                       name-verification-threshold.ts (tunable OCR match threshold)
+    src/events/        GET /api/events — reads the `events` table (Logs tab)
+    src/project/       Save/load a whole config: export-import.ts + /api/project routes
+    src/logging/       Per-device CSV error log (error-log.ts)
+    src/http/          Shared error handling, async wrapper, test helper
+    src/util/          Concurrency limiter, network.ts (lanAddresses — phase 3 item 12)
+    src/db/            Schema, migrations, seed data, encryption at rest
+  frontend/  React + Tailwind + TanStack Query, built to static files
+    src/lib/           API client, query keys, Socket.io singleton, ocrWorker.ts (self-hosted
+                       Tesseract.js), nameVerification.ts, previewCapture.ts (one-shot preview
+                       frame grab for "Verify all")
+    src/hooks/         TanStack Query hooks per resource + useDeviceSocket + useSettings + useEvents +
+                        usePreviewSocket + useServerInfo + usePollerStatus + useNameVerification
+    src/components/    DeviceGrid/Card, BatchActionBar, MacroBuilder/Editor, AnalyticsPane, LineChart,
+                        CommandPicker (searchable/grouped), InputSelectPicker (slot/type/number),
+                        GlobalCredentialsForm, DeviceCredentialsModal, GroupsManager, BulkAddDevicesForm,
+                        EventLogViewer, CommandCatalogueManager, ProjectFileManager, AboutPage,
+                        NameVerificationSettingsForm,
+                        PreviewGrid/DevicePreviewTile (talks directly to each projector, no backend involved)
+    public/            Vite static assets — vendored Tesseract WASM/lang data (gitignored, see
+                       `npm run setup:ocr-assets`) + UserGuide.md/LICENSE.txt mirrored in by
+                       scripts/copy-static-docs.mjs on every dev/build
+docs/
+  panasonic-command-list.txt        Text extracted from the official command-list PDF
+  ptrq-connection.txt               Text extracted from the official connection appendix PDF
+  protocol-notes.md                 Handshake/framing decisions, confirmed vs. open questions
+  vision-name-verification-plan.md  Design + build/validation log for name verification (above)
+  UserGuide.md                      Plain-English guide for non-technical users; also rendered in-app
+scripts/
+  package.mjs                  Windows/macOS/Linux SEA packaging (phase 7) — npm run package:win / package:mac / package:linux
+  setup-ocr-assets.mjs         One-time vendoring of Tesseract.js WASM/language data — npm run setup:ocr-assets
+  copy-static-docs.mjs         Mirrors docs/UserGuide.md + LICENSE into packages/frontend/public/
+_old/                           Legacy prototype scripts, staged for review/removal (see docs/PROGRESS.md);
+                                the large reference PDFs were purged from git history and live here
+                                untracked/gitignored — not part of the repo, just this machine
+release/                       Packaging output (gitignored) — not committed; distributed via GitHub Releases
+```
+
+## Changelog
+
+**v1.1 released.** All of `docs/NextSteps.md` Phases 1-4 are done
 (live preview, built-in command/usability additions, auto-numbered
 bulk-add + natural sort + duplicate-name guard), vision-based projector
 name verification is built and validated against real hardware (self-hosted
 OCR, no internet required — see `docs/vision-name-verification-plan.md`),
-and the app ships as a single packaged Windows or macOS executable
-(`npm run package:win` / `npm run package:mac`, built for each platform by
-`.github/workflows/release.yml`) distributed via [GitHub
+and the app ships as a single packaged Windows, macOS, or Linux executable
+(`npm run package:win` / `npm run package:mac` / `npm run package:linux`,
+built for each platform by `.github/workflows/release.yml`) distributed via
+[GitHub
 Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest),
 MIT-licensed, with an in-app About page (version, license, and the user
 guide rendered in-app) and a plain-English `docs/UserGuide.md`. 256 backend
@@ -176,7 +354,7 @@ After trying the packaged exe, four gaps were flagged and closed:
   group with one click, and an "Add to group" control in the batch action
   bar (merges into a device's existing groups rather than replacing them).
 
-Still no browser to verify visually with (see the phase 6 caveat below) —
+Still no browser to verify visually with (see the Phase 6 caveat below) —
 verified via typecheck, build, and the same real API smoke-testing approach
 used throughout.
 
@@ -194,40 +372,7 @@ rather than committed to git — remember `scripts/package.mjs` deletes and
 regenerates the whole `release/win/` folder on every rebuild, including any
 `data/` subfolder next to a previous exe (see `docs/PROGRESS.md`).
 
-### Packaging
-
-```sh
-npm run package:win   # release/win/ProjectorControl.exe
-npm run package:mac   # release/mac/ProjectorControl
-```
-
-Builds everything and produces a single executable containing the Node
-runtime and the entire app (Express, Socket.io, SQLite, all of it), via
-Node's built-in [Single Executable
-Applications](https://nodejs.org/api/single-executable-applications.html)
-feature (`scripts/package.mjs`). The built frontend and SQL migrations ship
-as plain `public/` and `migrations/` folders next to the exe rather than
-embedded inside it — see the comment at the top of `scripts/package.mjs` for
-why that's a deliberate, documented simplification rather than an oversight.
-Double-click the exe (or run the mac binary directly); it creates a `data/`
-folder beside itself on first run (SQLite database + encryption key) and
-serves the app at `http://localhost:8080`.
-
-SEA injection is platform-specific — the script copies whichever node binary
-is currently running it — so each build has to run ON (or FOR) its target
-OS. `.github/workflows/release.yml` handles this by running
-`npm run package:win` / `npm run package:mac` on GitHub's `windows-latest`
-and `macos-latest` runners on every `v*` tag push (or via manual
-`workflow_dispatch`), zipping each `release/<platform>/` folder and
-attaching it to the matching GitHub release. Linux isn't packaged — there's
-no distribution target for it.
-
-**Verified working (Windows)**: built, launched, and exercised end to end —
-device registration, command dispatch, macro creation/execution, telemetry,
-and a live Socket.io connection all confirmed against the actual packaged
-exe (not just the dev server), including that data survives a restart. The
-macOS build hasn't been run against real hardware yet — the CI job produces
-and uploads it, but exercise it locally before relying on it.
+### Phase 6 — full React app
 
 Phase 6 built the real React app in the order the kickoff prompt specifies:
 
@@ -273,136 +418,6 @@ ships inside Node itself, so there's nothing to compile on a fresh dev
 machine and nothing native to embed in phase 7's single-executable build.
 Swapping back to `better-sqlite3` (or Prisma, the spec's other named option)
 would only touch `packages/backend/src/db/`.
-
-## Layout
-
-```
-packages/
-  shared/    Types and protocol constants shared by backend and frontend
-  backend/   Express + Socket.io server, SQLite (node:sqlite)
-    src/protocol/      NTCONTROL TCP client + mock projector server (phase 2)
-    src/credentials/   Per-device / global credential resolution (phase 2)
-    src/poller/        Background polling, health/telemetry, alerting (phase 3)
-    src/devices/       Device read-model (phase 3) + CRUD routes (phase 4)
-    src/groups/        Group CRUD routes (phase 4)
-    src/commands/      Command catalogue CRUD routes (phase 4)
-    src/dispatch/      Command dispatch engine + POST /api/dispatch (phase 4)
-    src/triggers/      External TCP/UDP trigger listener + CRUD (phase 4)
-    src/scheduler/     node-cron task runner + /api/schedules CRUD (phase 5)
-    src/macros/        Macro execution engine + /api/macros CRUD
-    src/settings/      Global credentials CRUD (/api/settings/credentials) +
-                       name-verification-threshold.ts (tunable OCR match threshold)
-    src/events/        GET /api/events — reads the `events` table (Logs tab)
-    src/project/       Save/load a whole config: export-import.ts + /api/project routes
-    src/logging/       Per-device CSV error log (error-log.ts)
-    src/http/          Shared error handling, async wrapper, test helper
-    src/util/          Concurrency limiter, network.ts (lanAddresses — phase 3 item 12)
-    src/db/            Schema, migrations, seed data, encryption at rest
-  frontend/  React + Tailwind + TanStack Query, built to static files
-    src/lib/           API client, query keys, Socket.io singleton, ocrWorker.ts (self-hosted
-                       Tesseract.js), nameVerification.ts, previewCapture.ts (one-shot preview
-                       frame grab for "Verify all")
-    src/hooks/         TanStack Query hooks per resource + useDeviceSocket + useSettings + useEvents +
-                        usePreviewSocket + useServerInfo + usePollerStatus + useNameVerification
-    src/components/    DeviceGrid/Card, BatchActionBar, MacroBuilder/Editor, AnalyticsPane, LineChart,
-                        CommandPicker (searchable/grouped), InputSelectPicker (slot/type/number),
-                        GlobalCredentialsForm, DeviceCredentialsModal, GroupsManager, BulkAddDevicesForm,
-                        EventLogViewer, CommandCatalogueManager, ProjectFileManager, AboutPage,
-                        NameVerificationSettingsForm,
-                        PreviewGrid/DevicePreviewTile (talks directly to each projector, no backend involved)
-    public/            Vite static assets — vendored Tesseract WASM/lang data (gitignored, see
-                       `npm run setup:ocr-assets`) + UserGuide.md/LICENSE.txt mirrored in by
-                       scripts/copy-static-docs.mjs on every dev/build
-docs/
-  panasonic-command-list.txt        Text extracted from the official command-list PDF
-  ptrq-connection.txt               Text extracted from the official connection appendix PDF
-  protocol-notes.md                 Handshake/framing decisions, confirmed vs. open questions
-  vision-name-verification-plan.md  Design + build/validation log for name verification (above)
-  UserGuide.md                      Plain-English guide for non-technical users; also rendered in-app
-scripts/
-  package.mjs                  Windows/macOS SEA packaging (phase 7) — npm run package:win / package:mac
-  setup-ocr-assets.mjs         One-time vendoring of Tesseract.js WASM/language data — npm run setup:ocr-assets
-  copy-static-docs.mjs         Mirrors docs/UserGuide.md + LICENSE into packages/frontend/public/
-_old/                           Legacy prototype scripts, staged for review/removal (see docs/PROGRESS.md);
-                                the large reference PDFs were purged from git history and live here
-                                untracked/gitignored — not part of the repo, just this machine
-release/                       Packaging output (gitignored) — not committed; distributed via GitHub Releases
-```
-
-## Requirements
-
-- Node.js >= 20.11 (LTS). Installed on this machine as v24.18.0 via winget
-  (`OpenJS.NodeJS.LTS`).
-- To package (`npm run package:win`) only: `signtool` (Windows SDK) is
-  optional — used to strip the copied node.exe's code signature before
-  injecting the app blob. Not installed on this machine; the script proceeds
-  without it and the packaged exe still runs correctly (verified), it's just
-  unsigned. Install the Windows SDK if you want that step to actually run.
-
-## Getting started
-
-```sh
-npm install
-npm run build --workspace @ppc/shared
-npm run migrate --workspace @ppc/backend   # creates data/projectors.sqlite
-npm run dev --workspace @ppc/backend       # http://localhost:8080
-npm run dev --workspace @ppc/frontend      # http://localhost:5173 (proxies /api and /socket.io)
-```
-
-Register a device and dispatch a command:
-
-```sh
-curl -X POST http://localhost:8080/api/devices -H 'content-type: application/json' \
-  -d '{"name":"Foyer","host":"192.168.0.131"}'
-
-curl -X POST http://localhost:8080/api/dispatch -H 'content-type: application/json' \
-  -d '{"target":{"kind":"device","ids":[1]},"commandKey":"power.on"}'
-```
-
-## API
-
-| Method | Path | Notes |
-|---|---|---|
-| GET/POST | `/api/devices` | List (with live state) / register |
-| POST | `/api/devices/bulk` | `{ namePrefix?, startIp, endIp, port? }` — one device per IP in range (same /24, max 254) |
-| GET/PATCH/DELETE | `/api/devices/:id` | |
-| PUT | `/api/devices/:id/groups` | Replace group membership: `{ groupIds: number[] }` |
-| PUT/DELETE | `/api/devices/:id/credentials` | Per-device override; DELETE falls back to the global default |
-| GET/POST | `/api/groups`, GET/PATCH/DELETE `/api/groups/:id` | |
-| GET/POST | `/api/commands`, GET/PATCH/DELETE `/api/commands/:id` | Built-in rows can't be deleted |
-| POST | `/api/dispatch` | `{ target: {kind: "device"\|"group"\|"all", ids?}, commandId? \| commandKey?, param? }` |
-| GET/POST | `/api/triggers`, GET/PATCH/DELETE `/api/triggers/:id` | External TCP/UDP trigger definitions |
-| GET/PUT | `/api/triggers/settings` | `{ enabled, tcpPort, udpPort }` — PUT restarts the listener immediately |
-| GET/POST | `/api/schedules`, GET/PATCH/DELETE `/api/schedules/:id` | Cron expression validated on write |
-| POST | `/api/schedules/:id/run` | Fires the task immediately, ignoring its cron schedule |
-| GET/POST | `/api/macros`, GET/PATCH/DELETE `/api/macros/:id` | `PATCH` with `steps` replaces the whole sequence |
-| POST | `/api/macros/:id/run` | `{ target? }` — falls back to each step's own target override if omitted |
-| GET | `/api/devices/:id/telemetry` | `?metric=&idx=&since=&limit=` — history for the analytics pane; metrics now include `ac_voltage` |
-| GET/PUT/DELETE | `/api/settings/credentials` | Global default `{ username, password }`; GET/PUT never return the password |
-| POST/GET | `/api/devices/:id/verify-name` | Vision-based name check (Preview tab) — POST `{ detectedText, confidence? }`, backend runs the match and persists it |
-| GET/PUT | `/api/settings/name-verification` | `{ similarityThreshold: number }` — tunes the fuzzy-match threshold used above |
-| GET | `/api/events` | `?deviceId=&severity=&since=&limit=` — the error/event log (Logs tab) |
-| GET | `/api/project/export` | Downloads the current config as a portable JSON file (no credentials) |
-| POST | `/api/project/import` | Applies a project file additively — existing rows are never overwritten |
-| POST/PATCH/DELETE | `/api/commands` | Already existed (phase 4) — now has frontend UI (`CommandCatalogueManager`) |
-| GET | `/api/health` | Now also returns `port` and `lanAddresses` — shown in the header (phase 3 item 12) |
-| GET/PUT | `/api/poller/status` | `{ paused: boolean }` — pause/resume the automatic poll cycle (phase 3 item 13); dispatch is unaffected either way |
-
-```sh
-npm test --workspace @ppc/backend   # protocol, poller, and all API tests
-```
-
-## Configuration
-
-Environment variables (all optional, see `packages/backend/src/config.ts`):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PPC_PORT` | `8080` | HTTP/Socket.io port |
-| `PPC_HOST` | `0.0.0.0` | Bind address — 0.0.0.0 so phones on the LAN can reach it |
-| `PPC_DATA_DIR` | `./data` | Where the SQLite file and encryption key live |
-| `PPC_DB_PATH` | `<data dir>/projectors.sqlite` | Override the database file location directly |
-| `PPC_SECRET_KEY` | *(generated)* | 32-byte hex key for encrypting stored projector passwords; auto-generated into `<data dir>/secret.key` if unset |
 
 ## License
 
