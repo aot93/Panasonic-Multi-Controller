@@ -3,7 +3,22 @@
 A checkpoint for resuming this build. Read this first if picking the project
 back up cold; it links out to the deeper docs rather than repeating them.
 
-**Last updated:** 2026-08-02. Worked through `docs/NextSteps.md`'s "Post v1
+**Last updated:** 2026-09-23. Built the missing frontend for
+`/api/triggers` (external TCP/UDP command/macro triggers, fully built and
+tested server-side since phase 4 but never given a UI — see the "No
+schedule or trigger management UI" bullet below, now resolved for
+triggers). New Triggers tab: a listener settings panel (enable/disable,
+UDP/TCP port, running status) plus CRUD for individual triggers (key,
+target, command-or-macro action, param), following the same
+`useMacros`/`MacroBuilder`/`MacroEditor` structure as the Macros tab.
+Verified live end-to-end: enabled the UDP listener, sent a real UDP
+datagram containing a trigger key from a separate process, and confirmed
+it dispatched against a real device with `lastFiredAt` updating in the UI.
+`/api/schedules` has the identical gap and still has no UI. `APP_VERSION`
+(`packages/backend/src/config.ts`) bumped `1.1` → `1.2` per its own
+documented convention; `README.md`'s changelog updated to match.
+
+**Previously, 2026-08-02:** Worked through `docs/NextSteps.md`'s "Post v1
 improvements" (2 items from user feedback): "Pre-Show: All on/off" buttons
 in the Preview tab, and human-readable text for every built-in query
 command's result (e.g. `SEFS1=3.0` now reads "3.0 seconds" instead of the
@@ -567,10 +582,11 @@ are corrected inline.)*
   browser~~ — **resolved**: the user has been actively using it in a real
   browser (`npm run dev`) against the real fleet, including Phase 2's live
   preview.
-- **No schedule or trigger management UI** — `/api/schedules` and
-  `/api/triggers` are fully built (phases 4-5) but phase 6's brief only
-  listed grid/batch-bar/macro-builder/analytics, so neither got a frontend.
-  Managing them today means calling the API directly.
+- ~~No schedule or trigger management UI~~ — **partially resolved**:
+  `/api/triggers` now has a full management UI (Triggers tab, 2026-09-23).
+  `/api/schedules` has the identical gap (fully built since phase 4-5, but
+  phase 6's brief only listed grid/batch-bar/macro-builder/analytics, so it
+  never got a frontend) and still means calling the API directly.
 - **macOS packaging is not implemented** — see the Status table and
   `scripts/package.mjs`'s own comments. Needs to happen on/for a Mac.
 - **The packaged exe is unsigned** (no `signtool` available to strip/replace

@@ -8,6 +8,7 @@ import type {
   DeviceEvent,
   DeviceWithState,
   EventSeverity,
+  ExternalTrigger,
   GlobalCredentialsStatus,
   GroupWithCount,
   Macro,
@@ -15,6 +16,7 @@ import type {
   NameVerificationResult,
   ProjectFile,
   ProjectImportResult,
+  TargetKind,
   TelemetryMetric,
   TelemetrySample,
 } from '@ppc/shared';
@@ -211,6 +213,39 @@ export const macrosApi = {
   update: (id: number, input: Partial<MacroInput>) => patch<Macro>(`/api/macros/${id}`, input),
   remove: (id: number) => del<void>(`/api/macros/${id}`),
   run: (id: number, target?: CommandTarget) => post<MacroRunResult>(`/api/macros/${id}/run`, target ? { target } : {}),
+};
+
+/* ------------------------------------------------------------------ */
+/* External triggers (spec §6)                                         */
+/* ------------------------------------------------------------------ */
+
+export interface TriggerInput {
+  triggerKey: string;
+  description?: string | null;
+  targetKind: TargetKind;
+  targetId?: number | null;
+  actionKind: 'command' | 'macro';
+  actionId: number;
+  param?: string | null;
+}
+
+export type UpdateTriggerInput = Partial<Omit<TriggerInput, 'triggerKey'>> & { enabled?: boolean };
+
+export interface TriggerSettings {
+  enabled: boolean;
+  tcpPort: number;
+  udpPort: number;
+  running: boolean;
+}
+
+export const triggersApi = {
+  list: () => get<ExternalTrigger[]>('/api/triggers'),
+  get: (id: number) => get<ExternalTrigger>(`/api/triggers/${id}`),
+  create: (input: TriggerInput) => post<ExternalTrigger>('/api/triggers', input),
+  update: (id: number, input: UpdateTriggerInput) => patch<ExternalTrigger>(`/api/triggers/${id}`, input),
+  remove: (id: number) => del<void>(`/api/triggers/${id}`),
+  getSettings: () => get<TriggerSettings>('/api/triggers/settings'),
+  putSettings: (input: { enabled: boolean; tcpPort: number; udpPort: number }) => put<TriggerSettings>('/api/triggers/settings', input),
 };
 
 /* ------------------------------------------------------------------ */

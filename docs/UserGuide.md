@@ -38,7 +38,7 @@ knowledge required.
 
 ## 3. Overview of functions
 
-The app is organised into six tabs across the top of the screen.
+The app is organised into seven tabs across the top of the screen.
 
 ### Devices
 
@@ -67,6 +67,20 @@ Build your own custom multi-step buttons — a named sequence of commands,
 with a short pause between each, that runs against a projector, a group,
 or every projector at once. Useful for routines like "Morning start-up"
 or "End of day shutdown".
+
+### Triggers
+
+Let another system on your network fire off a command or macro by sending
+it a short text key over the network (TCP or UDP) — useful for hooking the
+app up to a lighting console, AV switcher, or show-control system.
+
+- Turn the listener on and choose a UDP and/or TCP port in the panel at the
+  top of the tab. It's off by default.
+- Add a trigger: give it a key (the text the other system will send),
+  choose what it should run (a command or a macro) and against which
+  projector, group, or all of them.
+- Each trigger shows when it last fired, and can be temporarily disabled
+  without deleting it.
 
 ### Preview
 

@@ -195,14 +195,17 @@ release/                       Packaging output (gitignored) — not committed; 
 
 ## Changelog
 
-**v1.1 released.** All of `docs/NextSteps.md` Phases 1-4 are done
+**v1.2 released.** All of `docs/NextSteps.md` Phases 1-4 are done
 (live preview, built-in command/usability additions, auto-numbered
 bulk-add + natural sort + duplicate-name guard), vision-based projector
 name verification is built and validated against real hardware (self-hosted
 OCR, no internet required — see `docs/vision-name-verification-plan.md`),
-and the app ships as a single packaged Windows, macOS, or Linux executable
-(`npm run package:win` / `npm run package:mac` / `npm run package:linux`,
-built for each platform by `.github/workflows/release.yml`) distributed via
+external TCP/UDP triggers (fire a command or macro from a lighting console,
+AV switcher, or show-control system) now have a management UI in the
+Triggers tab, and the app ships as a single packaged Windows, macOS, or
+Linux executable (`npm run package:win` / `npm run package:mac` /
+`npm run package:linux`, built for each platform by
+`.github/workflows/release.yml`) distributed via
 [GitHub
 Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest),
 MIT-licensed, with an in-app About page (version, license, and the user
@@ -210,7 +213,17 @@ guide rendered in-app) and a plain-English `docs/UserGuide.md`. 256 backend
 tests passing (`npm test --workspace @ppc/backend`). See `docs/PROGRESS.md`
 for the full phase-by-phase history.
 
-### Latest: vision-based projector name verification, About page, v1.1
+### Latest: external TCP/UDP trigger management UI, v1.2
+
+`/api/triggers` (external TCP/UDP command/macro triggers) has been fully
+built and tested server-side since phase 4, but had no frontend — managing
+a trigger meant calling the API directly. The new Triggers tab adds a
+listener settings panel (enable/disable, UDP/TCP port) and full CRUD for
+triggers (key, target, command-or-macro action), mirroring the existing
+Macros UI's structure. `/api/schedules` has the identical gap and remains
+API-only.
+
+### vision-based projector name verification, About page, v1.1
 
 Using the live-preview WebSocket (Phase 2, below), the browser runs OCR
 (self-hosted Tesseract.js, fully offline) against a projector's current
@@ -366,7 +379,7 @@ that fleet** — anything that would dispatch or newly poll a command against
 it needs to be confirmed first, not assumed safe. See `docs/PROGRESS.md`'s
 real-hardware section for what was checked. `release/win/ProjectorControl.exe`
 is rebuilt and re-validated against the real fleet as each round of changes
-lands (currently v1.1 — see the top of this file and `docs/PROGRESS.md`),
+lands (currently v1.2 — see the top of this file and `docs/PROGRESS.md`),
 published via [GitHub Releases](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest)
 rather than committed to git — remember `scripts/package.mjs` deletes and
 regenerates the whole `release/win/` folder on every rebuild, including any

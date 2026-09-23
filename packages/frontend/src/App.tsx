@@ -12,14 +12,15 @@ import { MacroBuilder } from './components/MacroBuilder';
 import { NameVerificationSettingsForm } from './components/NameVerificationSettingsForm';
 import { PreviewGrid } from './components/PreviewGrid';
 import { ProjectFileManager } from './components/ProjectFileManager';
+import { TriggerBuilder } from './components/TriggerBuilder';
 import { useDevices } from './hooks/useDevices';
 import { useDeviceSocket } from './hooks/useDeviceSocket';
 import { useGroups } from './hooks/useGroups';
 import { usePollerStatus, useSetPollerPaused } from './hooks/usePollerStatus';
 import { useServerInfo } from './hooks/useServerInfo';
 
-type Tab = 'devices' | 'macros' | 'preview' | 'logs' | 'settings' | 'about';
-const TABS: Tab[] = ['devices', 'macros', 'preview', 'logs', 'settings', 'about'];
+type Tab = 'devices' | 'macros' | 'triggers' | 'preview' | 'logs' | 'settings' | 'about';
+const TABS: Tab[] = ['devices', 'macros', 'triggers', 'preview', 'logs', 'settings', 'about'];
 
 export function App() {
   const [tab, setTab] = useState<Tab>('devices');
@@ -111,6 +112,8 @@ export function App() {
       )}
 
       {tab === 'macros' && <MacroBuilder />}
+
+      {tab === 'triggers' && <TriggerBuilder />}
 
       {tab === 'preview' && <PreviewGrid />}
 

@@ -44,7 +44,7 @@ export const PUBLIC_DIR = packaged ? resolve(exeDir(), 'public') : resolve(compi
  * deliberately not tied to package.json's npm/semver version. Bump by 0.1
  * per release (1.0, 1.1, 1.2, ...); this is the one place that changes.
  */
-export const APP_VERSION = '1.1';
+export const APP_VERSION = '1.2';
 
 export const HTTP_PORT = Number(process.env.PPC_PORT ?? 8080);
 
