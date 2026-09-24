@@ -21,7 +21,7 @@ const actionRefSchema = z.union([
 const paramOptionSchema = z.object({ label: z.string(), value: z.string() });
 
 const projectFileSchema = z.object({
-  formatVersion: z.literal(1),
+  formatVersion: z.literal(2),
   exportedAt: z.string(),
   appName: z.literal('panasonic-multi-controller'),
   devices: z.array(
@@ -61,7 +61,7 @@ const projectFileSchema = z.object({
       sortOrder: z.number().int(),
       steps: z.array(
         z.object({
-          commandKey: z.string().min(1),
+          action: actionRefSchema,
           param: z.string().nullable(),
           delayMsAfter: z.number().int().min(0),
           target: targetRefSchema.nullable(),

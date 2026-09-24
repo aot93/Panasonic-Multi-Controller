@@ -16,7 +16,7 @@ function makeDb(): DatabaseSync {
 test('exportProject: empty database exports empty arrays', () => {
   const db = makeDb();
   const file = exportProject(db);
-  assert.equal(file.formatVersion, 1);
+  assert.equal(file.formatVersion, 2);
   assert.deepEqual(file.devices, []);
   assert.deepEqual(file.groups, []);
   assert.deepEqual(file.commands, []);
@@ -94,7 +94,7 @@ test('a macro built on a built-in command round-trips by key, not by numeric id'
 
   const file = exportProject(source);
   assert.equal(file.macros.length, 1);
-  assert.equal(file.macros[0]?.steps[0]?.commandKey, 'power.on');
+  assert.deepEqual(file.macros[0]?.steps[0]?.action, { kind: 'command', commandKey: 'power.on' });
 
   const target = makeDb(); // fresh db, built-ins seeded with (probably) different numeric ids
   const result = importProject(target, file);
@@ -119,8 +119,8 @@ test('a macro step referencing an unknown command key is dropped with a warning,
     icon: null,
     sortOrder: 0,
     steps: [
-      { commandKey: 'power.on', param: null, delayMsAfter: 200, target: null },
-      { commandKey: 'no.such.command', param: null, delayMsAfter: 200, target: null },
+      { action: { kind: 'command', commandKey: 'power.on' }, param: null, delayMsAfter: 200, target: null },
+      { action: { kind: 'command', commandKey: 'no.such.command' }, param: null, delayMsAfter: 200, target: null },
     ],
   });
 
@@ -150,6 +150,71 @@ test('a device referencing an unknown group name is still created, with a warnin
   const result = importProject(target, file);
   assert.equal(result.devices.created, 1);
   assert.ok(result.warnings.some((w) => w.includes('Nonexistent Group')));
+});
+
+test('a macro-call step round-trips, even when the file declares the callee after the caller', () => {
+  const target = makeDb();
+  const file = exportProject(makeDb());
+  file.macros.push(
+    {
+      name: 'Full Startup',
+      description: null,
+      colour: null,
+      icon: null,
+      sortOrder: 0,
+      steps: [{ action: { kind: 'macro', macroName: 'Power On' }, param: null, delayMsAfter: 0, target: null }],
+    },
+    {
+      name: 'Power On',
+      description: null,
+      colour: null,
+      icon: null,
+      sortOrder: 1,
+      steps: [{ action: { kind: 'command', commandKey: 'power.on' }, param: null, delayMsAfter: 200, target: null }],
+    },
+  );
+
+  const result = importProject(target, file);
+  assert.equal(result.macros.created, 2);
+  assert.deepEqual(result.warnings, []);
+
+  const powerOnId = (target.prepare('SELECT id FROM macros WHERE name = ?').get('Power On') as { id: number }).id;
+  const step = target
+    .prepare('SELECT step_kind, child_macro_id FROM macro_steps WHERE macro_id = (SELECT id FROM macros WHERE name = ?)')
+    .get('Full Startup') as { step_kind: string; child_macro_id: number };
+  assert.equal(step.step_kind, 'macro');
+  assert.equal(step.child_macro_id, powerOnId);
+});
+
+test('a macro-call step that would create a call loop within the imported file is dropped, not fatal', () => {
+  const target = makeDb();
+  const file = exportProject(makeDb());
+  file.macros.push(
+    {
+      name: 'A',
+      description: null,
+      colour: null,
+      icon: null,
+      sortOrder: 0,
+      steps: [{ action: { kind: 'macro', macroName: 'B' }, param: null, delayMsAfter: 0, target: null }],
+    },
+    {
+      name: 'B',
+      description: null,
+      colour: null,
+      icon: null,
+      sortOrder: 1,
+      steps: [{ action: { kind: 'macro', macroName: 'A' }, param: null, delayMsAfter: 0, target: null }],
+    },
+  );
+
+  const result = importProject(target, file);
+  assert.equal(result.macros.created, 1); // A: its call into B was the first edge, accepted
+  assert.equal(result.macros.skipped, 1); // B: calling back into A would close the loop — dropped
+  assert.ok(result.warnings.some((w) => w.includes('call loop')));
+
+  const bSteps = target.prepare('SELECT COUNT(*) AS n FROM macro_steps WHERE macro_id = (SELECT id FROM macros WHERE name = ?)').get('B') as { n: number };
+  assert.equal(bSteps.n, 0);
 });
 
 test('credentials are never part of the exported file', () => {

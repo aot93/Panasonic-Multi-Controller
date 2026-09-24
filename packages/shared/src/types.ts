@@ -217,8 +217,12 @@ export interface MacroStep {
   id: number;
   macroId: number;
   seq: number;
-  commandId: number;
-  /** Literal parameter value substituted into the command body. */
+  kind: 'command' | 'macro';
+  /** Set when kind is "command"; null when kind is "macro". */
+  commandId: number | null;
+  /** Set when kind is "macro" — id of the macro this step invokes; null when kind is "command". */
+  childMacroId: number | null;
+  /** Literal parameter value substituted into the command body. Only meaningful for "command" steps. */
   param: string | null;
   /** Pause after this step, in milliseconds. */
   delayMsAfter: number;
@@ -240,11 +244,15 @@ export interface MacroRunResult {
 
 export interface MacroStepOutcome {
   seq: number;
-  commandId: number;
+  kind: 'command' | 'macro';
+  commandId: number | null;
+  childMacroId: number | null;
   ok: boolean;
-  /** Set when the step could not even be dispatched (bad target, etc) — distinct from a per-device failure inside `results`. */
+  /** Set when the step could not even be dispatched (bad target, a call-loop guard tripped, etc) — distinct from a per-device failure inside `results`. */
   error: string | null;
   results: CommandResult[] | null;
+  /** Set when kind is "macro" — the nested macro's own run result. */
+  nested: MacroRunResult | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -433,7 +441,7 @@ export interface ProjectCommand {
 }
 
 export interface ProjectMacroStep {
-  commandKey: string;
+  action: ProjectActionRef;
   param: string | null;
   delayMsAfter: number;
   target: ProjectTargetRef | null;
@@ -468,7 +476,8 @@ export interface ProjectTrigger {
 }
 
 export interface ProjectFile {
-  formatVersion: 1;
+  /** 2: macro steps can call another macro (ProjectMacroStep.action replaces the old commandKey-only field). */
+  formatVersion: 2;
   exportedAt: string;
   appName: 'panasonic-multi-controller';
   devices: ProjectDevice[];

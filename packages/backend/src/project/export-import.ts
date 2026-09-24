@@ -13,6 +13,7 @@ import type {
   ProjectTrigger,
 } from '@ppc/shared';
 import { withTransaction } from '../db/transaction.js';
+import { addEdge, canReach, loadMacroCallGraph } from '../macros/cycle.js';
 
 /**
  * Save/load a whole configuration to a portable JSON file (NextSteps.md
@@ -72,7 +73,9 @@ interface MacroRow {
 
 interface MacroStepRow {
   seq: number;
-  command_id: number;
+  step_kind: 'command' | 'macro';
+  command_id: number | null;
+  child_macro_id: number | null;
   param: string | null;
   delay_ms_after: number;
   target_kind: 'device' | 'group' | 'all' | null;
@@ -176,11 +179,14 @@ export function exportProject(db: DatabaseSync): ProjectFile {
   const commandKeyById = new Map<number, string>(
     (db.prepare('SELECT id, key FROM commands').all() as unknown as { id: number; key: string }[]).map((r) => [r.id, r.key]),
   );
+  const macroNameById = new Map<number, string>(
+    (db.prepare('SELECT id, name FROM macros').all() as unknown as { id: number; name: string }[]).map((r) => [r.id, r.name]),
+  );
 
   const macroRows = db.prepare('SELECT * FROM macros ORDER BY sort_order, name').all() as unknown as MacroRow[];
   const macros: ProjectMacro[] = macroRows.map((m) => {
     const stepRows = db
-      .prepare('SELECT seq, command_id, param, delay_ms_after, target_kind, target_id FROM macro_steps WHERE macro_id = ? ORDER BY seq')
+      .prepare('SELECT seq, step_kind, command_id, child_macro_id, param, delay_ms_after, target_kind, target_id FROM macro_steps WHERE macro_id = ? ORDER BY seq')
       .all(m.id) as unknown as MacroStepRow[];
     return {
       name: m.name,
@@ -189,13 +195,18 @@ export function exportProject(db: DatabaseSync): ProjectFile {
       icon: m.icon,
       sortOrder: m.sort_order,
       steps: stepRows
-        .map((s) => ({
-          commandKey: commandKeyById.get(s.command_id) ?? '',
-          param: s.param,
-          delayMsAfter: s.delay_ms_after,
-          target: s.target_kind ? targetRefFromRow(db, s.target_kind, s.target_id) : null,
-        }))
-        .filter((s) => s.commandKey !== ''),
+        .map((s) => {
+          const action: ProjectActionRef | null =
+            s.step_kind === 'macro'
+              ? s.child_macro_id !== null && macroNameById.has(s.child_macro_id)
+                ? { kind: 'macro', macroName: macroNameById.get(s.child_macro_id)! }
+                : null
+              : s.command_id !== null && commandKeyById.has(s.command_id)
+                ? { kind: 'command', commandKey: commandKeyById.get(s.command_id)! }
+                : null;
+          return action && { action, param: s.param, delayMsAfter: s.delay_ms_after, target: s.target_kind ? targetRefFromRow(db, s.target_kind, s.target_id) : null };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null),
     };
   });
 
@@ -221,7 +232,7 @@ export function exportProject(db: DatabaseSync): ProjectFile {
   }));
 
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: new Date().toISOString(),
     appName: 'panasonic-multi-controller',
     devices,
@@ -360,46 +371,99 @@ export function importProject(db: DatabaseSync, file: ProjectFile): ProjectImpor
     const insertMacro = db.prepare(
       'INSERT INTO macros (name, description, colour, icon, sort_order) VALUES (@name, @description, @colour, @icon, @sortOrder)',
     );
+    const deleteMacro = db.prepare('DELETE FROM macros WHERE id = ?');
     const insertStep = db.prepare(
-      `INSERT INTO macro_steps (macro_id, seq, command_id, param, delay_ms_after, target_kind, target_id)
-       VALUES (@macroId, @seq, @commandId, @param, @delayMsAfter, @targetKind, @targetId)`,
+      `INSERT INTO macro_steps (macro_id, seq, step_kind, command_id, child_macro_id, param, delay_ms_after, target_kind, target_id)
+       VALUES (@macroId, @seq, @stepKind, @commandId, @childMacroId, @param, @delayMsAfter, @targetKind, @targetId)`,
     );
-    const macroIdByName = new Map<string, number>();
 
+    // Pass 1: give every macro name in the file a real id — existing macros
+    // keep theirs, new ones are created without steps yet — so pass 2 can
+    // resolve a macro-call step that names a macro declared later in the
+    // file (or, combined with the cycle check below, reject one that names
+    // a macro that would call back into it).
+    const macroIdByName = new Map<string, number>(
+      (db.prepare('SELECT id, name FROM macros').all() as unknown as { id: number; name: string }[]).map((r) => [r.name, r.id]),
+    );
+    const newMacros: { m: ProjectMacro; id: number }[] = [];
     for (const m of file.macros) {
-      const existing = db.prepare('SELECT id FROM macros WHERE name = ?').get(m.name) as { id: number } | undefined;
-      if (existing) {
+      if (macroIdByName.has(m.name)) {
         result.macros.skipped++;
         result.warnings.push(`Macro "${m.name}" already exists — skipped`);
         continue;
       }
+      const info = insertMacro.run({ name: m.name, description: m.description, colour: m.colour, icon: m.icon, sortOrder: m.sortOrder });
+      const macroId = Number(info.lastInsertRowid);
+      macroIdByName.set(m.name, macroId);
+      newMacros.push({ m, id: macroId });
+    }
 
+    // Pass 2: resolve each new macro's steps and insert them, rejecting
+    // (with a warning, not a fatal error — same treatment as an unresolved
+    // command key) any macro-call step that would close a loop, including
+    // one that only exists because of another macro elsewhere in this file.
+    const callGraph = loadMacroCallGraph(db);
+    for (const { m, id: macroId } of newMacros) {
       const resolvedSteps = m.steps
         .map((s, seq) => {
-          const commandId = commandIdByKey.get(s.commandKey);
-          if (commandId === undefined) {
-            result.warnings.push(`Macro "${m.name}" step ${seq + 1}: command "${s.commandKey}" not found on this install — step skipped`);
-            return null;
-          }
           const target = resolveTarget(s.target);
           if (s.target && !target) {
             result.warnings.push(`Macro "${m.name}" step ${seq + 1}: target not found — step's target override was dropped`);
           }
-          return { commandId, param: s.param, delayMsAfter: s.delayMsAfter, targetKind: target?.kind ?? null, targetId: target?.id ?? null };
+          const targetKind = target?.kind ?? null;
+          const targetId = target?.id ?? null;
+
+          if (s.action.kind === 'macro') {
+            const childId = macroIdByName.get(s.action.macroName);
+            if (childId === undefined) {
+              result.warnings.push(`Macro "${m.name}" step ${seq + 1}: macro "${s.action.macroName}" not found on this install — step skipped`);
+              return null;
+            }
+            if (canReach(callGraph, childId, macroId)) {
+              result.warnings.push(`Macro "${m.name}" step ${seq + 1}: calling macro "${s.action.macroName}" here would create a call loop — step skipped`);
+              return null;
+            }
+            addEdge(callGraph, macroId, childId);
+            return { stepKind: 'macro' as const, commandId: null, childMacroId: childId, param: s.param, delayMsAfter: s.delayMsAfter, targetKind, targetId };
+          }
+
+          const commandId = commandIdByKey.get(s.action.commandKey);
+          if (commandId === undefined) {
+            result.warnings.push(`Macro "${m.name}" step ${seq + 1}: command "${s.action.commandKey}" not found on this install — step skipped`);
+            return null;
+          }
+          return { stepKind: 'command' as const, commandId, childMacroId: null, param: s.param, delayMsAfter: s.delayMsAfter, targetKind, targetId };
         })
         .filter((s): s is NonNullable<typeof s> => s !== null);
 
       if (resolvedSteps.length === 0) {
+        try {
+          deleteMacro.run(macroId);
+          macroIdByName.delete(m.name);
+        } catch {
+          // Another macro's step already accepted an edge into this one
+          // (only reachable via a hand-edited file declaring a call cycle
+          // where this macro's own steps are otherwise all unresolvable) —
+          // child_macro_id is ON DELETE RESTRICT, so leave the empty shell
+          // rather than raising out of the whole import.
+        }
         result.macros.skipped++;
         result.warnings.push(`Macro "${m.name}": none of its steps could be resolved — skipped entirely`);
         continue;
       }
 
-      const info = insertMacro.run({ name: m.name, description: m.description, colour: m.colour, icon: m.icon, sortOrder: m.sortOrder });
-      const macroId = Number(info.lastInsertRowid);
-      macroIdByName.set(m.name, macroId);
       resolvedSteps.forEach((s, seq) =>
-        insertStep.run({ macroId, seq, commandId: s.commandId, param: s.param, delayMsAfter: s.delayMsAfter, targetKind: s.targetKind, targetId: s.targetId }),
+        insertStep.run({
+          macroId,
+          seq,
+          stepKind: s.stepKind,
+          commandId: s.commandId,
+          childMacroId: s.childMacroId,
+          param: s.param,
+          delayMsAfter: s.delayMsAfter,
+          targetKind: s.targetKind,
+          targetId: s.targetId,
+        }),
       );
       result.macros.created++;
     }

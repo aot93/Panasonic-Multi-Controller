@@ -189,3 +189,105 @@ test('GET /api/macros/:id returns 404 for an unknown id', async () => {
     await app.close();
   }
 });
+
+async function createMacro(baseUrl: string, name: string, steps: unknown[]): Promise<{ id: number }> {
+  const res = await fetch(`${baseUrl}/api/macros`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, steps }),
+  });
+  const body = (await res.json()) as { id: number };
+  assert.equal(res.status, 201, JSON.stringify(body));
+  return body;
+}
+
+test('POST /api/macros creates a step that calls another macro', async () => {
+  const { db, app } = await setup();
+  try {
+    const powerOn = await createMacro(app.baseUrl, 'Power On', [{ commandId: commandId(db, 'power.on') }]);
+    const outer = await createMacro(app.baseUrl, 'Full Startup', [{ kind: 'macro', childMacroId: powerOn.id }]);
+
+    const res = await fetch(`${app.baseUrl}/api/macros/${outer.id}`);
+    const body = (await res.json()) as { steps: { kind: string; commandId: number | null; childMacroId: number | null }[] };
+    assert.equal(body.steps[0]?.kind, 'macro');
+    assert.equal(body.steps[0]?.childMacroId, powerOn.id);
+    assert.equal(body.steps[0]?.commandId, null);
+  } finally {
+    await app.close();
+  }
+});
+
+test('PATCH /api/macros/:id rejects a step that calls the macro it belongs to', async () => {
+  const { db, app } = await setup();
+  try {
+    const macro = await createMacro(app.baseUrl, 'Self Caller', [{ commandId: commandId(db, 'power.on') }]);
+
+    const res = await fetch(`${app.baseUrl}/api/macros/${macro.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ steps: [{ kind: 'macro', childMacroId: macro.id }] }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('PATCH /api/macros/:id rejects a step that would close a longer call loop (A -> B -> A)', async () => {
+  const { db, app } = await setup();
+  try {
+    const a = await createMacro(app.baseUrl, 'A', [{ commandId: commandId(db, 'power.on') }]);
+    // B calling A is fine — A does not yet call anything.
+    const b = await createMacro(app.baseUrl, 'B', [{ kind: 'macro', childMacroId: a.id }]);
+
+    // Now make A call B too — B already calls A, so this closes the loop.
+    const res = await fetch(`${app.baseUrl}/api/macros/${a.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ steps: [{ kind: 'macro', childMacroId: b.id }] }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('DELETE /api/macros/:id fails while another macro still calls it', async () => {
+  const { db, app } = await setup();
+  try {
+    const a = await createMacro(app.baseUrl, 'Called', [{ commandId: commandId(db, 'power.on') }]);
+    await createMacro(app.baseUrl, 'Caller', [{ kind: 'macro', childMacroId: a.id }]);
+
+    const res = await fetch(`${app.baseUrl}/api/macros/${a.id}`, { method: 'DELETE' });
+    assert.equal(res.status, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /api/macros/:id/run executes a macro whose step calls another macro', async () => {
+  const { db, app } = await setup();
+  const mock = new MockProjector({ protectMode: 'none', initialState: { power: 'off' } });
+  const port = await mock.listen();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host, port) VALUES (?, ?, ?)').run('Foyer', '127.0.0.1', port)
+        .lastInsertRowid,
+    );
+    const powerOn = await createMacro(app.baseUrl, 'Power On', [{ commandId: commandId(db, 'power.on') }]);
+    const outer = await createMacro(app.baseUrl, 'Full Startup', [{ kind: 'macro', childMacroId: powerOn.id }]);
+
+    const res = await fetch(`${app.baseUrl}/api/macros/${outer.id}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: { kind: 'device', ids: [deviceId] } }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { ok: boolean };
+    assert.equal(body.ok, true);
+    assert.equal(mock.state.power, 'on');
+  } finally {
+    await app.close();
+    await mock.close();
+  }
+});

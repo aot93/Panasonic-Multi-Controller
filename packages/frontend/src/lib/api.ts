@@ -190,7 +190,9 @@ export const dispatchApi = {
 /* ------------------------------------------------------------------ */
 
 export interface MacroStepInput {
-  commandId: number;
+  kind?: 'command' | 'macro';
+  commandId?: number | null;
+  childMacroId?: number | null;
   param?: string | null;
   delayMsAfter?: number;
   targetKind?: CommandTarget['kind'] | null;

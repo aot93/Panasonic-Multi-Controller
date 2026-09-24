@@ -68,6 +68,12 @@ with a short pause between each, that runs against a projector, a group,
 or every projector at once. Useful for routines like "Morning start-up"
 or "End of day shutdown".
 
+A step can also run another macro instead of a command, so a "Full
+Startup" macro can call a "Power On" macro and a "Set Inputs" macro rather
+than duplicating their steps. You can't build a loop this way — a macro
+that would end up calling itself, directly or through a chain of other
+macros, is rejected when you try to save it.
+
 ### Triggers
 
 Let another system on your network fire off a command or macro by sending

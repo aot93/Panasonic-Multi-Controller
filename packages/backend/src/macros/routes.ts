@@ -10,21 +10,29 @@ import {
   isForeignKeyConstraintError,
   isUniqueConstraintError,
 } from '../http/errors.js';
+import { canReach, loadMacroCallGraph } from './cycle.js';
 import { runMacro } from './run-macro.js';
 
 const targetKindSchema = z.enum(['device', 'group', 'all']);
 
 const macroStepSchema = z
   .object({
-    commandId: z.number().int(),
+    kind: z.enum(['command', 'macro']).optional(),
+    commandId: z.number().int().nullable().optional(),
+    childMacroId: z.number().int().nullable().optional(),
     param: z.string().nullable().optional(),
     delayMsAfter: z.number().int().min(0).default(200),
     targetKind: targetKindSchema.nullable().optional(),
     targetId: z.number().int().nullable().optional(),
   })
+  .transform((v) => ({ ...v, kind: v.kind ?? (v.childMacroId != null ? ('macro' as const) : ('command' as const)) }))
   .refine((v) => !v.targetKind || (v.targetKind === 'all' ? v.targetId == null : v.targetId != null), {
     message: 'a step target override must satisfy: "all" omits targetId, "device"/"group" requires it',
     path: ['targetId'],
+  })
+  .refine((v) => (v.kind === 'command' ? v.commandId != null && v.childMacroId == null : v.childMacroId != null && v.commandId == null), {
+    message: 'a "command" step needs commandId (and no childMacroId); a "macro" step needs childMacroId (and no commandId)',
+    path: ['kind'],
   });
 
 const createMacroSchema = z.object({
@@ -63,7 +71,9 @@ interface MacroStepRow {
   id: number;
   macro_id: number;
   seq: number;
-  command_id: number;
+  step_kind: MacroStep['kind'];
+  command_id: number | null;
+  child_macro_id: number | null;
   param: string | null;
   delay_ms_after: number;
   target_kind: MacroStep['targetKind'];
@@ -75,7 +85,9 @@ function toStep(row: MacroStepRow): MacroStep {
     id: row.id,
     macroId: row.macro_id,
     seq: row.seq,
+    kind: row.step_kind,
     commandId: row.command_id,
+    childMacroId: row.child_macro_id,
     param: row.param,
     delayMsAfter: row.delay_ms_after,
     targetKind: row.target_kind,
@@ -112,20 +124,46 @@ function requireMacro(db: DatabaseSync, id: number): Macro {
 
 function insertSteps(db: DatabaseSync, macroId: number, steps: z.infer<typeof macroStepSchema>[]): void {
   const insert = db.prepare(
-    `INSERT INTO macro_steps (macro_id, seq, command_id, param, delay_ms_after, target_kind, target_id)
-     VALUES (@macroId, @seq, @commandId, @param, @delayMsAfter, @targetKind, @targetId)`,
+    `INSERT INTO macro_steps (macro_id, seq, step_kind, command_id, child_macro_id, param, delay_ms_after, target_kind, target_id)
+     VALUES (@macroId, @seq, @stepKind, @commandId, @childMacroId, @param, @delayMsAfter, @targetKind, @targetId)`,
   );
   steps.forEach((step, seq) => {
     insert.run({
       macroId,
       seq,
-      commandId: step.commandId,
+      stepKind: step.kind,
+      commandId: step.commandId ?? null,
+      childMacroId: step.childMacroId ?? null,
       param: step.param ?? null,
       delayMsAfter: step.delayMsAfter,
       targetKind: step.targetKind ?? null,
       targetId: step.targetId ?? null,
     });
   });
+}
+
+/**
+ * Rejects a step that would call a macro already reachable "from below" —
+ * i.e. one that (directly or transitively) already calls the macro these
+ * steps belong to. `macroId` is null while creating a brand new macro,
+ * where no cycle is possible: nothing can yet reference an id that doesn't
+ * exist.
+ */
+function assertNoMacroCallCycle(db: DatabaseSync, macroId: number | null, steps: z.infer<typeof macroStepSchema>[]): void {
+  if (macroId === null) return;
+  const graph = loadMacroCallGraph(db);
+  for (const step of steps) {
+    if (step.kind !== 'macro') continue;
+    const childId = step.childMacroId!;
+    if (canReach(graph, childId, macroId)) {
+      const childName = (db.prepare('SELECT name FROM macros WHERE id = ?').get(childId) as { name: string } | undefined)?.name ?? `#${childId}`;
+      throw new BadRequestError(
+        childId === macroId
+          ? 'A macro step cannot call the macro it belongs to — that is an immediate loop'
+          : `Calling macro "${childName}" here would create a call loop back to this macro`,
+      );
+    }
+  }
 }
 
 /**
@@ -154,6 +192,7 @@ export function macrosRouter(db: DatabaseSync, dispatch: Dispatch): Router {
     '/',
     asyncHandler(async (req, res) => {
       const body = createMacroSchema.parse(req.body);
+      assertNoMacroCallCycle(db, null, body.steps);
       let macroId: number;
       try {
         const info = db
@@ -171,7 +210,7 @@ export function macrosRouter(db: DatabaseSync, dispatch: Dispatch): Router {
         insertSteps(db, macroId, body.steps);
       } catch (err) {
         if (isUniqueConstraintError(err)) throw new BadRequestError(`A macro named "${body.name}" already exists`);
-        if (isForeignKeyConstraintError(err)) throw new BadRequestError('A step references a commandId that does not exist');
+        if (isForeignKeyConstraintError(err)) throw new BadRequestError('A step references a commandId or childMacroId that does not exist');
         throw err;
       }
       res.status(201).json(requireMacro(db, macroId));
@@ -184,6 +223,7 @@ export function macrosRouter(db: DatabaseSync, dispatch: Dispatch): Router {
       const macroId = Number(req.params.id);
       requireMacro(db, macroId);
       const body = updateMacroSchema.parse(req.body);
+      if (body.steps) assertNoMacroCallCycle(db, macroId, body.steps);
 
       const sets: string[] = [];
       const params: Record<string, string | number | null> = { id: macroId };
@@ -218,7 +258,7 @@ export function macrosRouter(db: DatabaseSync, dispatch: Dispatch): Router {
         }
       } catch (err) {
         if (isUniqueConstraintError(err)) throw new BadRequestError(`A macro named "${body.name}" already exists`);
-        if (isForeignKeyConstraintError(err)) throw new BadRequestError('A step references a commandId that does not exist');
+        if (isForeignKeyConstraintError(err)) throw new BadRequestError('A step references a commandId or childMacroId that does not exist');
         throw err;
       }
 
@@ -230,7 +270,15 @@ export function macrosRouter(db: DatabaseSync, dispatch: Dispatch): Router {
     '/:id',
     asyncHandler(async (req, res) => {
       const macroId = Number(req.params.id);
-      const info = db.prepare('DELETE FROM macros WHERE id = ?').run(macroId);
+      let info;
+      try {
+        info = db.prepare('DELETE FROM macros WHERE id = ?').run(macroId);
+      } catch (err) {
+        if (isForeignKeyConstraintError(err)) {
+          throw new BadRequestError('This macro is still called by a step in another macro — remove that step first');
+        }
+        throw err;
+      }
       if (info.changes === 0) throw new NotFoundError(`No macro with id ${macroId}`);
       res.status(204).end();
     }),

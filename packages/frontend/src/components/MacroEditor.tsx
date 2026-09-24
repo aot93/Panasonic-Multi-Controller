@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Macro } from '@ppc/shared';
 import { CommandParamInput } from './CommandParamInput';
 import { CommandPicker } from './CommandPicker';
 import { useCommands } from '../hooks/useCommands';
-import { useCreateMacro, useUpdateMacro } from '../hooks/useMacros';
+import { useCreateMacro, useMacros, useUpdateMacro } from '../hooks/useMacros';
 import type { MacroInput, MacroStepInput } from '../lib/api';
 
 interface DraftStep extends MacroStepInput {
@@ -21,12 +21,32 @@ function toDraftSteps(macro?: Macro): DraftStep[] {
   if (!macro) return [];
   return macro.steps.map((s) => ({
     key: draftKey(),
+    kind: s.kind,
     commandId: s.commandId,
+    childMacroId: s.childMacroId,
     param: s.param,
     delayMsAfter: s.delayMsAfter,
     targetKind: s.targetKind,
     targetId: s.targetId,
   }));
+}
+
+/** True if calling `childId` from `ownerId` would (transitively) call back into `ownerId` — a client-side mirror of the server's loop gate, used only to grey out choices that would obviously be rejected. */
+function wouldLoop(allMacros: Macro[], ownerId: number | undefined, childId: number): boolean {
+  if (ownerId === undefined) return false; // a brand-new macro has no id yet, so nothing can call back into it
+  const seen = new Set<number>([ownerId]);
+  const queue = [childId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === ownerId) return true;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    const macro = allMacros.find((m) => m.id === current);
+    for (const step of macro?.steps ?? []) {
+      if (step.kind === 'macro' && step.childMacroId !== null) queue.push(step.childMacroId);
+    }
+  }
+  return false;
 }
 
 interface MacroEditorProps {
@@ -39,6 +59,7 @@ interface MacroEditorProps {
 /** Custom button/macro builder (spec §5): program a sequence of actions and bind them to a custom button. */
 export function MacroEditor({ macro, onDone, onCancel }: MacroEditorProps) {
   const { data: commands = [] } = useCommands();
+  const { data: allMacros = [] } = useMacros();
   const createMacro = useCreateMacro();
   const updateMacro = useUpdateMacro();
 
@@ -49,10 +70,16 @@ export function MacroEditor({ macro, onDone, onCancel }: MacroEditorProps) {
 
   const saving = createMacro.isPending || updateMacro.isPending;
 
+  /** Other macros this one can call without an obvious loop — the server has the final say (it also sees in-flight edits to other macros), this just keeps the picker from offering choices that would always be rejected. */
+  const callableMacros = useMemo(
+    () => allMacros.filter((m) => m.id !== macro?.id && !wouldLoop(allMacros, macro?.id, m.id)),
+    [allMacros, macro?.id],
+  );
+
   function addStep() {
     const first = commands[0];
     if (!first) return;
-    setSteps((prev) => [...prev, { key: draftKey(), commandId: first.id, param: null, delayMsAfter: 200, targetKind: null, targetId: null }]);
+    setSteps((prev) => [...prev, { key: draftKey(), kind: 'command', commandId: first.id, childMacroId: null, param: null, delayMsAfter: 200, targetKind: null, targetId: null }]);
   }
 
   function updateStep(key: string, patch: Partial<DraftStep>) {
@@ -132,14 +159,43 @@ export function MacroEditor({ macro, onDone, onCancel }: MacroEditorProps) {
             <div key={step.key} className="flex flex-wrap items-center gap-2 rounded border border-slate-800 bg-slate-950/60 p-2">
               <span className="w-5 text-center text-xs text-slate-500">{index + 1}</span>
 
-              <CommandPicker
-                commands={commands}
-                value={step.commandId}
-                onChange={(commandId) => updateStep(step.key, { commandId, param: null })}
-                placeholder="Choose a command…"
-              />
+              <select
+                value={step.kind ?? 'command'}
+                onChange={(e) => {
+                  const kind = e.target.value as 'command' | 'macro';
+                  updateStep(step.key, kind === 'command' ? { kind, childMacroId: null, commandId: commands[0]?.id ?? null } : { kind, commandId: null, param: null, childMacroId: callableMacros[0]?.id ?? null });
+                }}
+                className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm"
+              >
+                <option value="command">Command</option>
+                <option value="macro">Run macro</option>
+              </select>
 
-              <CommandParamInput command={command} value={step.param ?? ''} onChange={(v) => updateStep(step.key, { param: v })} />
+              {step.kind === 'macro' ? (
+                <select
+                  value={step.childMacroId ?? ''}
+                  onChange={(e) => updateStep(step.key, { childMacroId: Number(e.target.value) })}
+                  className="max-w-[14rem] rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Choose a macro…</option>
+                  {callableMacros.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  <CommandPicker
+                    commands={commands}
+                    value={step.commandId ?? ''}
+                    onChange={(commandId) => updateStep(step.key, { commandId, param: null })}
+                    placeholder="Choose a command…"
+                  />
+
+                  <CommandParamInput command={command} value={step.param ?? ''} onChange={(v) => updateStep(step.key, { param: v })} />
+                </>
+              )}
 
               <label className="flex items-center gap-1 text-xs text-slate-400">
                 Delay after (ms)

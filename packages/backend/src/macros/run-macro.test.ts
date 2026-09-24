@@ -203,13 +203,64 @@ test('runMacro: a macro with no steps (or a nonexistent id) throws', async () =>
   await assert.rejects(() => runMacro(db, dispatch, 999, { kind: 'all' }, 'ui'));
 });
 
+test('runMacro: a macro-call step runs the nested macro, target falls through from the outer invocation', async () => {
+  const db = makeDb();
+  const mock = new MockProjector({ protectMode: 'none', initialState: { power: 'off', aspect: 0 } });
+  const port = await mock.listen();
+  try {
+    const deviceId = Number(
+      db.prepare('INSERT INTO devices (name, host, port) VALUES (?, ?, ?)').run('Foyer', '127.0.0.1', port)
+        .lastInsertRowid,
+    );
+    const innerId = insertMacro(db, 'Power On');
+    insertStep(db, innerId, 0, commandId(db, 'power.on'));
+    const outerId = insertMacro(db, 'Full Startup');
+    db.prepare(
+      `INSERT INTO macro_steps (macro_id, seq, step_kind, child_macro_id, delay_ms_after) VALUES (?, 0, 'macro', ?, 0)`,
+    ).run(outerId, innerId);
+    insertStep(db, outerId, 1, commandId(db, 'aspect.set'), { param: '6' });
+    const dispatch = createDispatcher(db, null, { pollNow: async () => {} });
+
+    const result = await runMacro(db, dispatch, outerId, { kind: 'device', ids: [deviceId] }, 'ui');
+    assert.equal(result.ok, true);
+    assert.equal(result.steps.length, 2);
+    assert.equal(result.steps[0]?.kind, 'macro');
+    assert.equal(result.steps[0]?.nested?.macroId, innerId);
+    assert.equal(mock.state.power, 'on');
+    assert.equal(mock.state.aspect, 6);
+  } finally {
+    await mock.close();
+  }
+});
+
+test('runMacro: a step calling a macro already on the call chain is refused instead of recursing forever', async () => {
+  const db = makeDb();
+  const aId = insertMacro(db, 'A');
+  const bId = insertMacro(db, 'B');
+  // Direct SQL bypasses the API's write-time loop gate (macros/routes.ts),
+  // simulating rows that ended up cyclic some other way — run-macro.ts's
+  // call-chain guard is the last-resort backstop for exactly this.
+  db.prepare(`INSERT INTO macro_steps (macro_id, seq, step_kind, child_macro_id, delay_ms_after) VALUES (?, 0, 'macro', ?, 0)`).run(aId, bId);
+  db.prepare(`INSERT INTO macro_steps (macro_id, seq, step_kind, child_macro_id, delay_ms_after) VALUES (?, 0, 'macro', ?, 0)`).run(bId, aId);
+  const dispatch = createDispatcher(db, null, { pollNow: async () => {} });
+
+  const result = await runMacro(db, dispatch, aId, { kind: 'all' }, 'ui');
+  assert.equal(result.ok, false);
+  assert.equal(result.steps.length, 1); // A has one step: call B
+  assert.equal(result.steps[0]?.ok, false);
+  const nested = result.steps[0]?.nested; // B's own run: its one step (calling back into A) was refused
+  assert.equal(nested?.ok, false);
+  assert.equal(nested?.steps.length, 1);
+  assert.match(nested?.steps[0]?.error ?? '', /loop/);
+});
+
 test('summarizeMacroRun: full success', () => {
   const summary = summarizeMacroRun({
     macroId: 1,
     ok: true,
     steps: [
-      { seq: 0, commandId: 1, ok: true, error: null, results: [] },
-      { seq: 1, commandId: 2, ok: true, error: null, results: [] },
+      { seq: 0, kind: 'command', commandId: 1, childMacroId: null, ok: true, error: null, results: [], nested: null },
+      { seq: 1, kind: 'command', commandId: 2, childMacroId: null, ok: true, error: null, results: [], nested: null },
     ],
   });
   assert.equal(summary, 'Macro: 2/2 steps completed');
@@ -220,8 +271,8 @@ test('summarizeMacroRun: reports the first failing step', () => {
     macroId: 1,
     ok: false,
     steps: [
-      { seq: 0, commandId: 1, ok: true, error: null, results: [] },
-      { seq: 1, commandId: 2, ok: false, error: 'connection refused', results: null },
+      { seq: 0, kind: 'command', commandId: 1, childMacroId: null, ok: true, error: null, results: [], nested: null },
+      { seq: 1, kind: 'command', commandId: 2, childMacroId: null, ok: false, error: 'connection refused', results: null, nested: null },
     ],
   });
   assert.equal(summary, 'Macro: 1/2 steps completed (step 1 failed: connection refused)');
