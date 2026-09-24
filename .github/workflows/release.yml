@@ -1,11 +1,12 @@
 name: Release builds
 
-# Builds the Windows, macOS, and Linux SEA executables (scripts/package.mjs)
-# on their real target OS — windows-latest / macos-latest / ubuntu-latest —
-# since SEA injection copies whichever node binary is currently running and
-# can't be cross-built. Zips each release/<platform> folder and attaches it
-# to the matching GitHub release, creating the release if it doesn't exist
-# yet.
+# Builds the Windows, macOS, and Linux (x64 + arm64) SEA executables
+# (scripts/package.mjs) on their real target OS — windows-latest /
+# macos-latest / ubuntu-latest / ubuntu-24.04-arm — since SEA injection
+# copies whichever node binary is currently running and can't be
+# cross-built. The arm64 job covers Raspberry Pi and other aarch64 Linux
+# targets. Zips each release/<platform> folder and attaches it to the
+# matching GitHub release, creating the release if it doesn't exist yet.
 on:
   push:
     tags:
@@ -37,6 +38,10 @@ jobs:
             platform: linux
             release_dir: release/linux
             asset_name: ProjectorControl-linux.zip
+          - os: ubuntu-24.04-arm
+            platform: linux
+            release_dir: release/linux
+            asset_name: ProjectorControl-linux-arm64.zip
     runs-on: ${{ matrix.os }}
     steps:
       - name: Resolve tag

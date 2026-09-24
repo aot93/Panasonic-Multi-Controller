@@ -4,7 +4,7 @@ Web app for monitoring and controlling a fleet of Panasonic projectors over
 the network — see `Claude/Panasonic_Projector_App_Spec_v2.md` for the full
 spec and `docs/protocol-notes.md` for protocol implementation notes.
 
-## Download (Windows / macOS / Linux)
+## Download (Windows / macOS / Linux / Linux ARM64)
 
 **[⬇ Download ProjectorControl-win.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-win.zip)**
 — extract anywhere and run `ProjectorControl.exe`. No install, no Node.js
@@ -16,9 +16,14 @@ Finder). The binary is ad-hoc signed, not notarized, so Gatekeeper will
 block the first launch — right-click it and choose Open once to clear that.
 
 **[⬇ Download ProjectorControl-linux.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-linux.zip)**
-— extract anywhere, `chmod +x ProjectorControl` if the executable bit didn't
-survive the unzip, and run `./ProjectorControl`. No install, no Node.js
-required.
+(x86_64) — extract anywhere, `chmod +x ProjectorControl` if the executable
+bit didn't survive the unzip, and run `./ProjectorControl`. No install, no
+Node.js required.
+
+**[⬇ Download ProjectorControl-linux-arm64.zip](https://github.com/aot93/Panasonic-Multi-Controller/releases/latest/download/ProjectorControl-linux-arm64.zip)**
+(aarch64 — Raspberry Pi 3/4/5 running a 64-bit OS, other ARM64 boards) —
+same as above: extract, `chmod +x ProjectorControl`, run `./ProjectorControl`.
+32-bit Raspberry Pi OS is not supported; use the 64-bit ("arm64") OS image.
 
 See `docs/UserGuide.md` (also rendered in-app, About tab) for setup and
 usage.
@@ -78,10 +83,13 @@ SEA injection is platform-specific — the script copies whichever node binary
 is currently running it — so each build has to run ON (or FOR) its target
 OS. `.github/workflows/release.yml` handles this by running
 `npm run package:win` / `npm run package:mac` / `npm run package:linux` on
-GitHub's `windows-latest`, `macos-latest`, and `ubuntu-latest` runners on
-every `v*` tag push (or via manual `workflow_dispatch`), zipping each
-`release/<platform>/` folder and attaching it to the matching GitHub
-release.
+GitHub's `windows-latest`, `macos-latest`, `ubuntu-latest`, and
+`ubuntu-24.04-arm` runners on every `v*` tag push (or via manual
+`workflow_dispatch`), zipping each `release/<platform>/` folder and
+attaching it to the matching GitHub release. The `ubuntu-latest` and
+`ubuntu-24.04-arm` jobs both run `package:linux` but produce different
+binaries (x86_64 vs aarch64) since each copies the node binary of the
+runner it's on.
 
 **Verified working (Windows)**: built, launched, and exercised end to end —
 device registration, command dispatch, macro creation/execution, telemetry,
@@ -91,7 +99,10 @@ exe (not just the dev server), including that data survives a restart.
 — server boots, `/api/health` responds, and the DOOM easter egg assets are
 present — but it hasn't been exercised against real projector hardware. The
 macOS build hasn't been run against real hardware yet either — the CI job
-produces and uploads it, but exercise it locally before relying on it.
+produces and uploads it, but exercise it locally before relying on it. The
+Linux ARM64 build hasn't been run locally at all yet (no ARM hardware on
+hand at build time) — the CI job produces and uploads it, but verify it
+boots on your Raspberry Pi/ARM board before relying on it.
 
 ## API
 
