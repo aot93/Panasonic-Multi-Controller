@@ -20,8 +20,33 @@ const actionRefSchema = z.union([
 
 const paramOptionSchema = z.object({ label: z.string(), value: z.string() });
 
+/**
+ * A macro step's action reference used to be a bare `commandKey` (format 1
+ * — every step was a command, macro-calling-macro didn't exist yet). Format
+ * 2 replaced it with `action: ProjectActionRef` so a step can name a macro
+ * instead. Accept both on import — files exported before this change
+ * shouldn't suddenly stop loading — normalizing the legacy shape into the
+ * current one so the rest of the pipeline only ever sees `action`.
+ */
+const macroStepSchema = z.union([
+  z.object({
+    action: actionRefSchema,
+    param: z.string().nullable(),
+    delayMsAfter: z.number().int().min(0),
+    target: targetRefSchema.nullable(),
+  }),
+  z
+    .object({
+      commandKey: z.string().min(1),
+      param: z.string().nullable(),
+      delayMsAfter: z.number().int().min(0),
+      target: targetRefSchema.nullable(),
+    })
+    .transform(({ commandKey, ...rest }) => ({ ...rest, action: { kind: 'command' as const, commandKey } })),
+]);
+
 const projectFileSchema = z.object({
-  formatVersion: z.literal(2),
+  formatVersion: z.union([z.literal(1), z.literal(2)]),
   exportedAt: z.string(),
   appName: z.literal('panasonic-multi-controller'),
   devices: z.array(
@@ -59,14 +84,7 @@ const projectFileSchema = z.object({
       colour: z.string().nullable(),
       icon: z.string().nullable(),
       sortOrder: z.number().int(),
-      steps: z.array(
-        z.object({
-          action: actionRefSchema,
-          param: z.string().nullable(),
-          delayMsAfter: z.number().int().min(0),
-          target: targetRefSchema.nullable(),
-        }),
-      ),
+      steps: z.array(macroStepSchema),
     }),
   ),
   schedules: z.array(
@@ -114,7 +132,7 @@ export function projectRouter(db: DatabaseSync, poller: Poller): Router {
       if (!parsed.success) {
         throw new BadRequestError(`Not a valid project file: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
       }
-      const result = importProject(db, parsed.data as ProjectFile);
+      const result = importProject(db, { ...parsed.data, formatVersion: 2 } as ProjectFile);
       if (result.createdDeviceIds.length > 0) {
         poller.pollNow(result.createdDeviceIds).catch((err: unknown) => {
           console.error('[project] post-import poll failed:', err);
