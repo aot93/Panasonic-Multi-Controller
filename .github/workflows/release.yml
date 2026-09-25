@@ -62,6 +62,9 @@ jobs:
       - name: Vendor DOOM easter egg assets
         run: npm run setup:doom-assets
 
+      - name: Vendor Tesseract OCR assets
+        run: npm run setup:ocr-assets
+
       - run: npm run package:${{ matrix.platform }}
 
       - name: Zip release folder (Windows)
